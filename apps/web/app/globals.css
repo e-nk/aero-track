@@ -1,26 +1,30 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/* SPEC 12.7 dark aviation palette. Amber is reserved for possible events, stale data and warnings. */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-navy: #101b2e;
+  --color-sky: #51b9ff;
+  --color-teal: #23c9a9;
+  --color-amber: #f5b85b;
+  --color-text: #e9f1f9;
+  --color-muted: #8a9bb4;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body {
+  background: var(--color-navy);
+  color: var(--color-text);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Keep map attribution readable on the dark map (beats maplibre-gl.css, which loads later). */
+.maplibregl-ctrl.maplibregl-ctrl-attrib {
+  background: rgb(16 27 46 / 0.85);
+  color: var(--color-text);
+}
+.maplibregl-ctrl.maplibregl-ctrl-attrib a {
+  color: var(--color-text);
+  text-decoration: underline;
+  text-decoration-color: rgb(233 241 249 / 0.35);
 }

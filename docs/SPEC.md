@@ -382,6 +382,7 @@ export const THRESHOLDS = {
   buffer: { keepSec: 900 },
   writer: { flushMs: 5000, maxRows: 500 },
   sse: { heartbeatMs: 15000, maxBufferedBytes: 1000000 },
+  display: { interpolateMaxSec: 15, sourceUpdateMs: 100, staleAfterSec: 30, altitudeBandsFt: [10000, 25000] },
   hygiene: {
     maxImpliedGsKt: 1000,       // drop position jumps faster than this
     minPoints: 4,
@@ -650,7 +651,9 @@ event: status        data: { feedStatus: "ok" | "degraded" | "down", lastPollAt 
 - Switching mode clears the map and store.
 
 ### 12.2 Mode badge (always visible)
-- Live: "Live · updated {n}s ago". Turns amber if stale over 30 s.
+- Live: "Live · updated {n}s ago" (time since the last snapshot arrived, browser clock). Turns amber if stale over 30 s.
+- Can't reach our API: "Can't reach AeroTrack right now · showing last known positions".
+- Server started but no poll yet: "Live · waiting for the first update".
 - Live feed down: "Live feed unavailable · showing last known positions" plus a button "Watch a recorded flight".
 - Recorded: "Recorded flight · {date, time} · {speed}x · Data: ADSB.lol (ODbL)".
 - Fixture (only if ever demoed): "Synthetic test case · not a real aircraft".
@@ -658,11 +661,12 @@ event: status        data: { feedStatus: "ok" | "degraded" | "down", lastPollAt 
 ### 12.3 Map
 - One GeoJSON source for all aircraft, one symbol layer. No HTML markers.
 - `icon-rotate` bound to `trackDeg`, `icon-rotation-alignment: map`.
-- Icon class from category/type (narrowbody, widebody, turboprop, light, helicopter, unknown). Original SVGs only.
+- Icon class from category/type (narrowbody, widebody, turboprop, light, helicopter, unknown). Original SVGs only. Type designator first (`apps/web/lib/iconClass.ts`), then emitter category; A2 alone stays `unknown` (regional jet or turboprop). When `trackDeg` is unknown, draw a non-directional dot: a plane icon would claim a heading.
 - Colour by altitude band.
 - Small badge on aircraft with an open event.
 - Selected aircraft: track layer from `/api/aircraft/:hex/track`, drawn as MultiLineString so gaps show as gaps.
-- Interpolation: between updates, dead-reckon from last fix using `gsKt` and `trackDeg`, capped at 15 s, snap on new data. `requestAnimationFrame`, update source at most 10 times per second.
+- Interpolation: between updates, dead-reckon from last fix using `gsKt` and `trackDeg`, capped at 15 s, snap on new data. `requestAnimationFrame`, update source at most 10 times per second. Position age = (snapshot `now` − `lastPosTs`) + browser time since the snapshot arrived, so server/browser clock skew doesn't matter. No dead reckoning on the ground. Aircraft dim after `display.staleAfterSec`.
+- MapLibre 6 loads its worker relative to its own module URL, which breaks when bundled. `apps/web/scripts/copy-maplibre-worker.mjs` copies it to `public/` before dev/build and `setWorkerUrl` points at it.
 - Attribution control always on.
 
 ### 12.4 Details panel

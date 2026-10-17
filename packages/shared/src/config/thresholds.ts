@@ -12,6 +12,12 @@ export interface Thresholds {
   buffer: { keepSec: number };
   writer: { flushMs: number; maxRows: number };
   sse: { heartbeatMs: number; maxBufferedBytes: number };
+  display: {
+    interpolateMaxSec: number;
+    sourceUpdateMs: number;
+    staleAfterSec: number;
+    altitudeBandsFt: readonly [number, number];
+  };
   hygiene: {
     maxImpliedGsKt: number;
     minPoints: number;
@@ -60,6 +66,12 @@ export const THRESHOLDS = {
   buffer: { keepSec: 900 }, // also: drop an aircraft this long after its last position
   writer: { flushMs: 5000, maxRows: 500 }, // batch positions, whichever comes first
   sse: { heartbeatMs: 15000, maxBufferedBytes: 1_000_000 }, // drop clients that fall this far behind
+  display: {
+    interpolateMaxSec: 15, // dead-reckon at most this far past the last fix
+    sourceUpdateMs: 100, // map source updates at most 10 times per second
+    staleAfterSec: 30, // badge turns amber / aircraft dims after this long without news
+    altitudeBandsFt: [10000, 25000], // colour bands: low < 10,000 ≤ mid < 25,000 ≤ high
+  },
   hygiene: {
     maxImpliedGsKt: 1000, // drop position jumps faster than this
     minPoints: 4,

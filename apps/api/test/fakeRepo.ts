@@ -91,6 +91,10 @@ export class FakeRepo implements Repo {
         lastSeenAt: lastPosTs,
       }));
   }
+  async findAircraft(callsigns: string[], registration: string) {
+    const all = await this.loadAircraft([...this.aircraft.keys()]);
+    return all.filter((a) => (a.callsign && callsigns.includes(a.callsign)) || a.registration?.replace(/-/g, "").toUpperCase() === registration);
+  }
   async loadOpenEvents() {
     return [...this.events.values()].filter((e) => e.status === "open");
   }

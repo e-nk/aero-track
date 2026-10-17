@@ -1,5 +1,5 @@
 import type { AircraftState, BehaviourEvent, Confidence, DataMode, EventType, RecordingFile, RecordingMeta } from "@aerotrack/shared";
-import { and, asc, count, desc, eq, gte, inArray, lte, min, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, lte, min, or, sql } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import type { PositionRow, Repo } from "../repo";
 import type { FollowEntry } from "../follows";
@@ -220,6 +220,28 @@ export function createPgRepo(db: Db): Repo {
         hex,
         callsign,
         registration,
+        typeCode,
+        typeDesc,
+        category,
+        lastSeenAt: toSec(lastSeenAt),
+      }));
+    },
+
+    async findAircraft(callsigns: string[], registration: string) {
+      const rows = await db
+        .select()
+        .from(aircraft)
+        .where(
+          or(
+            callsigns.length ? inArray(aircraft.callsign, callsigns) : undefined,
+            sql`upper(replace(${aircraft.registration}, '-', '')) = ${registration}`,
+          ),
+        )
+        .limit(50);
+      return rows.map(({ hex, callsign, registration: reg, typeCode, typeDesc, category, lastSeenAt }) => ({
+        hex,
+        callsign,
+        registration: reg,
         typeCode,
         typeDesc,
         category,

@@ -3,6 +3,7 @@
 //        pnpm build:airports --world  -> apps/api/src/data/worldAirports.ts (server only, for followed flights)
 import { writeFileSync } from "node:fs";
 import { THRESHOLDS } from "../packages/shared/src/config/thresholds";
+import { parseCsv } from "./csv.mts";
 
 const SOURCE = "https://davidmegginson.github.io/ourairports-data/airports.csv";
 const MAX_NM = 70;
@@ -10,39 +11,6 @@ const WORLD = process.argv.includes("--world");
 const OUT = WORLD
   ? new URL("../apps/api/src/data/worldAirports.ts", import.meta.url)
   : new URL("../packages/shared/src/airports.ts", import.meta.url);
-
-/** Minimal RFC 4180 parser: quoted fields, escaped quotes, commas and newlines inside quotes. */
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = "";
-  let quoted = false;
-  const endField = () => {
-    row.push(field);
-    field = "";
-  };
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i]!;
-    if (quoted) {
-      if (c === '"' && text[i + 1] === '"') {
-        field += '"';
-        i++;
-      } else if (c === '"') quoted = false;
-      else field += c;
-    } else if (c === '"') quoted = true;
-    else if (c === ",") endField();
-    else if (c === "\n") {
-      endField();
-      rows.push(row);
-      row = [];
-    } else if (c !== "\r") field += c;
-  }
-  if (field || row.length) {
-    endField();
-    rows.push(row);
-  }
-  return rows;
-}
 
 function distanceNm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const r = (d: number) => (d * Math.PI) / 180;

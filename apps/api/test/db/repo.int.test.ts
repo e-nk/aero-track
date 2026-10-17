@@ -72,6 +72,15 @@ describe.skipIf(!url)("Postgres repo", () => {
     expect(await repo.loadPositionsSince(0)).toEqual([]);
   });
 
+  it("finds stored aircraft by callsign or dash-free registration", async () => {
+    await repo.upsertAircraft([
+      state("7c0001", obs(T0), { callsign: "QFA1", registration: "VH-OQA" }),
+      state("7c0002", obs(T0), { callsign: "JST524", registration: "VH-VQG" }),
+    ]);
+    expect((await repo.findAircraft(["QFA1"], "NOPE")).map((a) => a.hex)).toEqual(["7c0001"]);
+    expect((await repo.findAircraft([], "VHVQG")).map((a) => a.hex)).toEqual(["7c0002"]);
+  });
+
   it("upserts aircraft identity", async () => {
     await repo.upsertAircraft([state("7c0001", obs(T0), { callsign: "OLD" })]);
     await repo.upsertAircraft([state("7c0001", obs(T0 + 7), { callsign: "NEW", registration: "VH-ABC" })]);

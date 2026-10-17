@@ -5,6 +5,7 @@ import { buildApp } from "../src/app";
 import { AircraftStore } from "../src/buffer";
 import type { PollerStatus } from "../src/poller";
 import { FollowList } from "../src/follows";
+import { OverviewStore } from "../src/overview/overviewStore";
 import { SightingTracker } from "../src/sightings";
 import { SseHub } from "../src/sse";
 import { FakeRepo } from "./fakeRepo";
@@ -21,6 +22,7 @@ function setup(
   const sightings = new SightingTracker({ keepSec: THRESHOLDS.buffer.keepSec, newId: () => "open-sighting" });
   const follows = new FollowList({ ...THRESHOLDS.follow, maxFollowed: 2 });
   const hub = new SseHub(THRESHOLDS.sse);
+  const overviewStore = new OverviewStore();
   const app = buildApp({
     store,
     lifecycle,
@@ -28,14 +30,14 @@ function setup(
     hub,
     follows,
     sightings,
-    overview: null,
+    overview: { store: overviewStore, status: () => ({ feedStatus: "ok", lastPollAt: T0 * 1000, consecutiveFailures: 0 }) },
     adminToken,
     status: () => status,
     nowSec: () => now,
     corsOrigin: ["http://localhost:3000"],
     logger: false,
   });
-  return { app, store, repo, lifecycle, sightings, follows, hub, setNow: (t: number) => (now = t) };
+  return { app, store, repo, lifecycle, sightings, follows, hub, overviewStore, setNow: (t: number) => (now = t) };
 }
 
 let close: (() => Promise<unknown>) | undefined;
@@ -55,13 +57,13 @@ describe("api routes", () => {
     track(store, "7c0001", [T0]);
     const res = await app.inject("/health");
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true, feedStatus: "ok", lastPollAt: T0 * 1000, aircraftCount: 1, overview: { enabled: false } });
+    expect(res.json()).toMatchObject({ ok: true, feedStatus: "ok", lastPollAt: T0 * 1000, aircraftCount: 1 });
   });
 
-  it("GET /health reports the overview as disabled when OpenSky isn't configured", async () => {
+  it("GET /health reports the overview status", async () => {
     const { app } = setup();
     close = () => app.close();
-    expect((await app.inject("/health")).json().overview).toEqual({ enabled: false });
+    expect((await app.inject("/health")).json().overview).toEqual({ enabled: true, feedStatus: "ok", fetchedAt: null, aircraftCount: 0 });
   });
 
   it("GET /health reports a down feed but stays 200", async () => {
@@ -209,6 +211,70 @@ describe("api routes", () => {
     });
     expect(res.headers["access-control-allow-methods"]).toMatch(/POST/);
     expect(res.headers["access-control-allow-methods"]).toMatch(/DELETE/);
+  });
+
+  describe("search", () => {
+    const search = async (app: ReturnType<typeof setup>["app"], q: string) => (await app.inject(`/api/search?q=${encodeURIComponent(q)}`)).json();
+
+    it("finds a live aircraft by flight number through the airline prefix", async () => {
+      const { app, store } = setup();
+      close = () => app.close();
+      store.ingest([state("7c0001", obs(T0), { callsign: "QFA1", registration: "VH-OQA", typeCode: "A388" })]);
+      expect(await search(app, "qf1")).toEqual({
+        query: "QF1",
+        results: [{ hex: "7c0001", callsign: "QFA1", registration: "VH-OQA", typeCode: "A388", matchedBy: "flight_prefix", freshness: "live", source: "detailed" }],
+        message: null,
+      });
+    });
+
+    it("finds by exact callsign, dash-free registration and type", async () => {
+      const { app, store } = setup();
+      close = () => app.close();
+      store.ingest([
+        state("7c0001", obs(T0), { callsign: "JST524", registration: "VH-VQG", typeCode: "A320" }),
+        state("7c0002", obs(T0), { callsign: "VOZ820", registration: "VH-YFH", typeCode: "B738" }),
+      ]);
+      expect((await search(app, "JST524")).results.map((r: { hex: string; matchedBy: string }) => [r.hex, r.matchedBy])).toEqual([["7c0001", "callsign"]]);
+      expect((await search(app, "vhyfh")).results[0]).toMatchObject({ hex: "7c0002", matchedBy: "registration" });
+      expect((await search(app, "B738")).results[0]).toMatchObject({ hex: "7c0002", matchedBy: "type" });
+    });
+
+    it("finds Australia-wide aircraft by callsign", async () => {
+      const { app, overviewStore } = setup();
+      close = () => app.close();
+      overviewStore.set(T0, [
+        { hex: "7c4920", callsign: "VOZ1001", lat: -27, lon: 153, altFt: 3000, altGeomFt: null, gsKt: 200, trackDeg: 0, baroRateFpm: 0, onGround: false, lastPosTs: T0 },
+      ]);
+      expect((await search(app, "VA1001")).results[0]).toMatchObject({ hex: "7c4920", matchedBy: "flight_prefix", freshness: "live", source: "overview" });
+    });
+
+    it("says when a stored aircraft was last seen", async () => {
+      const { app, repo } = setup();
+      close = () => app.close();
+      await repo.upsertAircraft([
+        state("7c0009", obs(T0 - 600), { callsign: "QFA9" }),
+        state("7c0008", obs(T0 - 3 * 86400), { callsign: "QFA8" }),
+      ]);
+      expect((await search(app, "QF9")).results[0]).toMatchObject({ hex: "7c0009", freshness: "last_seen_10m", source: "history" });
+      expect((await search(app, "QFA8")).results[0]).toMatchObject({ hex: "7c0008", freshness: "not_seen" });
+    });
+
+    it("explains a miss honestly", async () => {
+      const { app } = setup();
+      close = () => app.close();
+      expect(await search(app, "QF77")).toEqual({
+        query: "QF77",
+        results: [],
+        message: "No live aircraft found for this flight number. The callsign may differ.",
+      });
+      expect((await search(app, "VH-ZZZ")).message).toBe("We can't see this aircraft right now. That doesn't mean the flight isn't operating.");
+    });
+
+    it("rejects queries that are too short", async () => {
+      const { app } = setup();
+      close = () => app.close();
+      expect((await app.inject("/api/search?q=Q")).statusCode).toBe(400);
+    });
   });
 
   describe("recordings", () => {

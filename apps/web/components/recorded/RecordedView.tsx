@@ -1,5 +1,6 @@
 "use client";
 
+import { useHeaderHeight } from "../../lib/useHeaderHeight";
 import { preprocess } from "@aerotrack/detectors";
 import { THRESHOLDS, type AircraftState, type RecordingFile } from "@aerotrack/shared";
 import dynamic from "next/dynamic";
@@ -9,6 +10,7 @@ import { OFFLINE } from "../../lib/config";
 import { loadRecording } from "../../lib/recordings";
 import { ReplayEngine } from "../../lib/replay/engine";
 import { useAircraftStore } from "../../store/aircraftStore";
+import { FilterBar } from "../filters/FilterBar";
 import { ModeBadge } from "../ModeBadge";
 import { DetailsPanel } from "../panel/DetailsPanel";
 import { ReplayControls } from "./ReplayControls";
@@ -19,6 +21,7 @@ const TICK_MS = 100; // real time between replay steps (and store updates)
 
 /** Recorded flight replay (SPEC 12.5). Runs the detectors in the browser; works with no network. */
 export function RecordedView({ id }: { id: string }) {
+  const headerRef = useHeaderHeight<HTMLElement>();
   const [recording, setRecording] = useState<RecordingFile | null | "missing">(null);
   const engineRef = useRef<ReplayEngine | null>(null);
 
@@ -100,7 +103,7 @@ export function RecordedView({ id }: { id: string }) {
   return (
     <main className="relative h-dvh w-full overflow-hidden bg-navy">
       {recording && <AircraftMap initialBounds={recording.bbox} />}
-      <header className="pointer-events-none absolute left-3 top-3 z-10 flex flex-wrap items-center gap-2">
+      <header ref={headerRef} className="pointer-events-none absolute left-3 top-3 z-10 flex flex-wrap items-center gap-2">
         <span className="pointer-events-auto rounded-full bg-navy/90 px-3 py-1.5 text-sm font-semibold text-text shadow-lg">
           AeroTrack
         </span>
@@ -113,6 +116,9 @@ export function RecordedView({ id }: { id: string }) {
         >
           {OFFLINE ? "All recordings" : "Back to live"}
         </Link>
+        <div className="pointer-events-auto">
+          <FilterBar />
+        </div>
       </header>
       {!recording && <p className="absolute inset-0 flex items-center justify-center text-muted">Loading recording…</p>}
       {recording && <ReplayControls title={recording.title} onSeek={seek} />}

@@ -301,8 +301,8 @@ Offline (P0): Protomaps PMTiles
 ### 5.4 Airline prefix mapping (P1)
 
 - Source: OpenFlights `airlines.dat` (ODbL): `https://raw.githubusercontent.com/jpatokal/openflights/master/data/airlines.dat`
-- `scripts/build-airlines.mts` (`pnpm build:airlines`) generates `packages/shared/src/airlines.ts`: `{ iata: "QF", icao: "QFA", name: "Qantas" }[]`. Keep only active airlines with both codes (851 on 2026-10-18).
-- Verified 2026-10-18: the file was last changed in **2017**, so it is stale (it still lists Tigerair Australia, which stopped flying in 2020; newer airlines are missing). Key Australian mappings are right (QF→QFA, VA→VOZ, JQ→JST, ZL→RXA). 17 IATA codes map to more than one active airline (e.g. SQ→SIA and SQC): search every candidate. Attribute "Airline codes: OpenFlights (ODbL)" in the README.
+- `scripts/build-airlines.mts` (`pnpm build:airlines`) generates `packages/shared/src/airlines.ts`: `{ iata: "QF", icao: "QFA", name: "Qantas" }[]`. Keep only active airlines with a 2-character IATA and 3-letter ICAO code (799 on 2026-10-18).
+- Verified 2026-10-18: the file was last changed in **2017**, so it is stale (it still lists Tigerair Australia, which stopped flying in 2020; newer airlines are missing). Key Australian mappings are right (QF→QFA, VA→VOZ, JQ→JST, ZL→RXA). 17 IATA codes map to more than one active airline (e.g. SQ→SIA and SQC): search every candidate. Attribute "Airline codes: OpenFlights (ODbL)" in the generated file header and in the README (written in Phase 13).
 - Flight number search: `QF1` → `QFA1`. Label results "Matched by airline prefix". Some airlines use callsign numbers that differ from flight numbers, so a miss must say "No live aircraft found for this flight number. The callsign may differ."
 
 ### 5.5 Airports (P1, take-off and landing)
@@ -787,7 +787,7 @@ event: status        data: { feedStatus: "ok" | "degraded" | "down", lastPollAt 
 - Searched in the detailed live set, the Australia-wide overview, and the `aircraft` table (last seen). Live results can be selected and the map flies to them; stored-only results say when they were last seen. Live mode only (not in recordings or offline).
 - Flight number → callsign via `airlines.ts` prefix map, labelled "Matched by airline prefix".
 - `not_seen` result text: "We can't see this aircraft right now. That doesn't mean the flight isn't operating."
-- Filters: airline (from callsign prefix: the first three letters when they're a known ICAO airline code) and aircraft type class (the map icon class). Options list only what's on the map now. Apply to the detailed and Australia-wide layers (overview aircraft have no type, so they only match the "Unknown type" class). Clear-all button. Not persisted. Work in live and recorded mode.
+- Filters: airline (from callsign prefix: the first three letters when they're a known ICAO airline code) and aircraft type class (the map icon class). Options list only what's on the map now. Apply to the detailed and Australia-wide layers (overview aircraft have no type, so they only match the "Unknown type" class). The selected aircraft stays visible even if a filter would hide it. Clear-all button. Not persisted. Work in live and recorded mode.
 - Messages: no match for a flight number → "No live aircraft found for this flight number. The callsign may differ."; no match otherwise → "We can't see this aircraft right now. That doesn't mean the flight isn't operating."
 
 ### 12.7 Design

@@ -17,6 +17,7 @@ import { buildAircraftFeatures } from "../../lib/aircraftFeatures";
 import { AUSTRALIA_VIEW, DATA_ATTRIBUTION, MAP_STYLE_URL, OFFLINE, OPENSKY_ATTRIBUTION } from "../../lib/config";
 import { offlineStyle } from "../../lib/mapStyle";
 import { coverageCircle } from "../../lib/coverage";
+import { filterAircraft, filterOverview } from "../../lib/filters";
 import { buildOverviewFeatures } from "../../lib/overviewFeatures";
 import { trackFeature } from "../../lib/trackFeature";
 import { useAircraftStore } from "../../store/aircraftStore";
@@ -107,17 +108,23 @@ export default function AircraftMap({ initialBounds }: { initialBounds?: [number
       if (t - last >= THRESHOLDS.display.sourceUpdateMs) {
         last = t;
         const map = mapRef.current?.getMap();
-        const { aircraft, overview, follows } = useAircraftStore.getState();
-        const live = Object.values(aircraft);
+        const { aircraft, overview, follows, filters, selectedHex } = useAircraftStore.getState();
+        const all = Object.values(aircraft);
+        // The selected aircraft stays visible even if a filter would hide it.
+        const keep = <T extends { hex: string }>(shown: T[], every: T[]) =>
+          selectedHex && !shown.some((a) => a.hex === selectedHex) ? [...shown, ...every.filter((a) => a.hex === selectedHex)] : shown;
+        const live = keep(filterAircraft(all, filters), all);
         const now = Date.now();
         const followed = new Set(follows?.follows.map((f) => f.hex));
         (map?.getSource(AIRCRAFT_SOURCE) as GeoJSONSource | undefined)?.setData(
           buildAircraftFeatures(live, now, THRESHOLDS.display, followed),
         );
         if (overview) {
-          const skip = new Set(live.map((a) => a.hex));
+          const skip = new Set(all.map((a) => a.hex));
+          const every = Object.values(overview.aircraft);
+          const shown = keep(filterOverview(every, filters), every);
           (map?.getSource(OVERVIEW_SOURCE) as GeoJSONSource | undefined)?.setData(
-            buildOverviewFeatures(overview, skip, now, THRESHOLDS.display),
+            buildOverviewFeatures({ ...overview, aircraft: Object.fromEntries(shown.map((a) => [a.hex, a])) }, skip, now, THRESHOLDS.display),
           );
         }
       }

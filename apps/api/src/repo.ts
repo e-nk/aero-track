@@ -20,6 +20,8 @@ export interface Repo {
   loadAircraft(
     hexes: string[],
   ): Promise<(Omit<AircraftState, "last" | "lastPosTs" | "squawk" | "emergency" | "altGeomFt" | "mode"> & { lastSeenAt?: number })[]>;
+  /** Stored aircraft whose last callsign is one of these, or whose registration (without dashes) matches. */
+  findAircraft(callsigns: string[], registration: string): ReturnType<Repo["loadAircraft"]>;
   loadOpenEvents(): Promise<BehaviourEvent[]>;
   /** Most recent events for one aircraft, newest first. */
   recentEvents(hex: string, limit: number): Promise<BehaviourEvent[]>;

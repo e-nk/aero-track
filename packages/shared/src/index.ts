@@ -5,3 +5,5 @@ export * from "./compact";
 export * from "./airports";
 export * from "./overview";
 export * from "./recording";
+export * from "./airlines";
+export * from "./search";

@@ -1,3 +1,4 @@
+import { NO_FILTERS, type Filters } from "../lib/filters";
 import type { BehaviourEvent, Observation, RecordingFile } from "@aerotrack/shared";
 import { create } from "zustand";
 import type { AircraftDetail } from "../lib/api";
@@ -52,6 +53,9 @@ interface AircraftStore extends LiveState {
   /** Select an aircraft and ask the map to fly to it (e.g. from the Following list). */
   focus: { hex: string; at: number } | null;
   focusOn: (hex: string) => void;
+  /** Map filters (SPEC 12.6). Not persisted; cleared when the mode changes. */
+  filters: Filters;
+  setFilters: (patch: Partial<Filters>) => void;
   setSelection: (hex: string, patch: Partial<Selection>) => void;
   seedEvents: (detail: AircraftDetail) => void;
   reset: () => void;
@@ -62,7 +66,7 @@ export const useAircraftStore = create<AircraftStore>()((set) => ({
   mode: "live",
   replay: null,
   startRecorded: (info) =>
-    set({ ...initialLiveState, mode: "recorded", replay: info, selectedHex: null, selection: EMPTY_SELECTION, focus: null }),
+    set({ ...initialLiveState, mode: "recorded", replay: info, selectedHex: null, selection: EMPTY_SELECTION, focus: null, filters: NO_FILTERS }),
   setReplayFrame: (clock, aircraft, events) =>
     set((s) => ({
       replay: s.replay && { ...s.replay, clock },
@@ -84,10 +88,13 @@ export const useAircraftStore = create<AircraftStore>()((set) => ({
   select: (hex) => set({ selectedHex: hex, selection: EMPTY_SELECTION }),
   focus: null,
   focusOn: (hex) => set({ selectedHex: hex, selection: EMPTY_SELECTION, focus: { hex, at: Date.now() } }),
+  filters: NO_FILTERS,
+  setFilters: (patch) => set((s) => ({ filters: { ...s.filters, ...patch } })),
   // Ignore late responses for an aircraft that is no longer selected.
   setSelection: (hex, patch) =>
     set((s) => (s.selectedHex === hex ? { selection: { ...s.selection, ...patch } } : {})),
   seedEvents: (detail) => set((s) => applyEventsSeed(s, detail.state.hex, detail.openEvents)),
   // Switching mode clears the map and store (SPEC 12.1).
-  reset: () => set({ ...initialLiveState, mode: "live", replay: null, selectedHex: null, selection: EMPTY_SELECTION, focus: null }),
+  reset: () =>
+    set({ ...initialLiveState, mode: "live", replay: null, selectedHex: null, selection: EMPTY_SELECTION, focus: null, filters: NO_FILTERS }),
 }));

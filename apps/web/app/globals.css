@@ -30,10 +30,7 @@ body {
 }
 
 /* Zoom buttons sit below the header pills, clear of the details panel. */
+/* Below the header, whose height (--header-h) changes with width and the Following row. */
 .maplibregl-map .maplibregl-ctrl-top-left {
-  top: 3.25rem;
-}
-/* With the Following row showing, the header is taller. */
-.has-follows .maplibregl-map .maplibregl-ctrl-top-left {
-  top: 5.5rem;
+  top: calc(0.75rem + var(--header-h, 2.25rem));
 }

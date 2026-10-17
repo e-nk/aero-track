@@ -36,7 +36,9 @@ export type EventType =
   | "signal_lost"
   | "glitch"
   | "gap"
-  | "emergency";
+  | "emergency"
+  | "takeoff"
+  | "landing";
 
 export type Confidence = "observed" | "possible" | "fact";
 

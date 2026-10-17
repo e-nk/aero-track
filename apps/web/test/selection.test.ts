@@ -36,7 +36,7 @@ const obs = (t: number, lon: number, lat: number): Observation => ({
 
 describe("event titles", () => {
   it("has a plain title for every event type", () => {
-    const types: EventType[] = ["climb", "descent", "turn", "circling", "rapid_descent", "signal_lost", "glitch", "gap", "emergency"];
+    const types: EventType[] = ["climb", "descent", "turn", "circling", "rapid_descent", "signal_lost", "glitch", "gap", "emergency", "takeoff", "landing"];
     for (const t of types) expect(EVENT_TITLE[t]).toMatch(/\w/);
     expect(eventTitle("circling")).toBe("Possibly circling");
   });

@@ -303,7 +303,7 @@ Offline (P0): Protomaps PMTiles
 ### 5.5 Airports (P1, take-off and landing)
 
 - OurAirports CSV: `https://davidmegginson.github.io/ourairports-data/airports.csv` (public domain). Verified 2026-10-17.
-- `scripts/build-airports.ts` generates `packages/shared/src/airports.ts`: every AU airport with an ICAO-style ident (`Y` + 3 letters, from `icao_code` or `ident`) within 70 nm of the poll centre. Fields: `ident`, `name`, `lat`, `lon`, `elevationFt`. Commit the generated file.
+- `scripts/build-airports.mts` (`pnpm build:airports`) generates `packages/shared/src/airports.ts`: every AU airport with an ICAO-style ident (`Y` + 3 letters, from `icao_code` or `ident`) within 70 nm of the poll centre. Fields: `ident`, `name`, `lat`, `lon`, `elevationFt`. Commit the generated file.
 - Names are OurAirports names, unchanged.
 
 ### 5.7 Aircraft photos: Planespotters.net (P1)
@@ -563,8 +563,8 @@ export const dHeading = (a: number, b: number) => ((b - a + 540) % 360) - 180; /
 
 ### 9.11 Take-off and landing (P1)
 - Look at every segment of the clean track (a transition must not straddle a gap).
-- Take-off: a point with `onGround` followed by at least `takeoffLanding.confirmObs` airborne points, with no ground point among them, gaining at least `minClimbFt` from the first airborne point. Time = first airborne point.
-- Landing: an airborne point at or below `maxTouchdownAltFt`, followed by at least `confirmObs` ground points with no airborne point among them. Time = first ground point.
+- Take-off: at least `confirmObs` points with `onGround`, followed by at least `takeoffLanding.confirmObs` airborne points, with no ground point among them, gaining at least `minClimbFt` from the first airborne point. Time = first airborne point.
+- Landing: at least `confirmObs` airborne points, the last at or below `maxTouchdownAltFt`, followed by at least `confirmObs` ground points with no airborne point among them. Time = first ground point. (Both sides are confirmed, so a single flickering report is never a take-off or landing.)
 - Report the most recent take-off and the most recent landing in the buffer (so a card stays for up to 15 minutes, then closes).
 - Airport: nearest from `airports.ts` within `airportRadiusKm` of the transition point; otherwise none ("away from the airports we know about").
 - Evidence: `at`, `airport` (ident), `airportName`, `airportKm`, plus `altFt` for take-off (altitude at confirmation).

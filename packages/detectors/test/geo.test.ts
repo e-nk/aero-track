@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dHeading, distanceNm } from "../src/geo";
+import { dHeading, distanceNm, nearestAirport } from "../src/geo";
 
 describe("dHeading", () => {
   it("takes the short way across north", () => {
@@ -25,5 +25,21 @@ describe("distanceNm", () => {
 
   it("is zero for the same point", () => {
     expect(distanceNm(-33.9, 151, -33.9, 151)).toBe(0);
+  });
+});
+
+describe("nearestAirport", () => {
+  it("finds Sydney Airport from its own coordinates", () => {
+    expect(nearestAirport(-33.946098, 151.177002, 5)).toMatchObject({ airport: { ident: "YSSY" } });
+    expect(nearestAirport(-33.946098, 151.177002, 5)!.km).toBeCloseTo(0, 3);
+  });
+
+  it("picks the closer of two nearby airports", () => {
+    // Between Bankstown (YSBK) and Holsworthy (YSHW), nearer Bankstown.
+    expect(nearestAirport(-33.93, 150.99, 10)!.airport.ident).toBe("YSBK");
+  });
+
+  it("returns null when nothing is within range", () => {
+    expect(nearestAirport(-33.45, 150.6, 5)).toBeNull();
   });
 });

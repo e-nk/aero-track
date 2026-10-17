@@ -96,6 +96,27 @@ describe("explain", () => {
     expect(e.cannotTell).toBe("The code alone doesn't tell us the reason.");
   });
 
+  it("take-off near an airport", () => {
+    expect(explain(det("takeoff", { at: T0, airport: "YSSY", airportName: "Sydney Kingsford Smith International Airport" }))).toEqual({
+      seen: "This aircraft took off near Sydney Kingsford Smith International Airport at 12:20 pm.",
+      cannotTell: "The data doesn't show where it is going.",
+    });
+  });
+
+  it("take-off away from known airports", () => {
+    expect(explain(det("takeoff", { at: T0 })).seen).toBe(
+      "This aircraft took off at 12:20 pm, away from the airports we know about.",
+    );
+  });
+
+  it("landing", () => {
+    expect(explain(det("landing", { at: T0, airport: "YSBK", airportName: "Sydney Bankstown Airport" }))).toEqual({
+      seen: "This aircraft landed near Sydney Bankstown Airport at 12:20 pm.",
+      cannotTell: "The data doesn't show the flight's full route.",
+    });
+    expect(explain(det("landing", { at: T0 })).seen).toBe("This aircraft landed at 12:20 pm, away from the airports we know about.");
+  });
+
   it("says 'Not available' instead of inventing missing numbers", () => {
     expect(explain(det("climb", {})).seen).toBe(
       "This aircraft has climbed Not available ft in the last Not available.",

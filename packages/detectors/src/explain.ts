@@ -4,6 +4,14 @@ import { NA, amount, clock, duration } from "./format";
 export { formatDuration } from "./format";
 
 // SPEC section 10. Fill only from evidence; anything missing reads "Not available".
+/** "near {airport} at 12:20 pm" or "at 12:20 pm, away from the airports we know about". */
+function where(e: Detection["evidence"], timeZone: string): string {
+  const time = clock(e.at, timeZone);
+  return typeof e.airportName === "string"
+    ? `near ${e.airportName} at ${time}`
+    : `at ${time}, away from the airports we know about`;
+}
+
 export interface ExplainOptions {
   timeZone?: string;
 }
@@ -64,6 +72,16 @@ export function explain(d: Detection, opts: ExplainOptions = {}): Explanation {
       return {
         seen: "This aircraft is transmitting an emergency code.",
         cannotTell: "The code alone doesn't tell us the reason.",
+      };
+    case "takeoff":
+      return {
+        seen: `This aircraft took off ${where(e, timeZone)}.`,
+        cannotTell: "The data doesn't show where it is going.",
+      };
+    case "landing":
+      return {
+        seen: `This aircraft landed ${where(e, timeZone)}.`,
+        cannotTell: "The data doesn't show the flight's full route.",
       };
   }
 }

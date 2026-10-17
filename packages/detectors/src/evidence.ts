@@ -64,6 +64,12 @@ export function describeEvidence(d: Detection, opts: EvidenceOptions = {}): stri
         has(e.secondsSinceLastPosition) && `Last position received ${duration(e.secondsSinceLastPosition)} ago.`,
         has(e.lastAltFt) && `Last known altitude ${amount(e.lastAltFt, 100)} ft.`,
         has(e.lastLat, e.lastLon) && `Last known position ${latLon(num(e.lastLat)!, num(e.lastLon)!)}.`,
+        // Where it was last seen; never a claim that it landed.
+        typeof e.nearAirportName === "string" &&
+          has(e.nearAirportKm) &&
+          `Last seen about ${amount(e.nearAirportKm, 1)} km from ${e.nearAirportName}${
+            e.lastVertical === "descending" || e.lastVertical === "climbing" ? `, ${e.lastVertical}` : ""
+          }.`,
       );
       break;
     case "glitch": {
@@ -83,6 +89,18 @@ export function describeEvidence(d: Detection, opts: EvidenceOptions = {}): stri
         has(e.gapStart, e.gapEnd) && `From ${clock(e.gapStart, timeZone)} to ${clock(e.gapEnd, timeZone)}.`,
       );
       break;
+    case "takeoff":
+    case "landing": {
+      const [from, to] = d.type === "takeoff" ? ["on the ground", "airborne"] : ["airborne", "on the ground"];
+      lines.push(
+        has(e.at) && `The aircraft reported being ${from}, then ${to} from ${clock(e.at, timeZone)}.`,
+        typeof e.airportName === "string" && has(e.airportKm)
+          ? `About ${num(e.airportKm)!.toFixed(1)} km from ${e.airportName}.`
+          : "Not near any airport in our list.",
+        d.type === "takeoff" && has(e.altFt) && `It had climbed to ${amount(e.altFt, 100)} ft a few reports later.`,
+      );
+      break;
+    }
     case "emergency":
       lines.push(
         typeof e.squawk === "string" && `Transponder code ${e.squawk}.`,

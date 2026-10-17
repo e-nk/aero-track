@@ -11,6 +11,8 @@ export const EVENT_TITLE: Record<EventType, string> = {
   glitch: "Altitude reading ignored",
   gap: "Gap in the data",
   emergency: "Emergency code",
+  takeoff: "Took off",
+  landing: "Landed",
 };
 
 export const eventTitle = (type: EventType) => EVENT_TITLE[type];

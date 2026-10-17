@@ -76,4 +76,18 @@ describe("runAll", () => {
     expect(r.status).toBe("insufficient_history");
     expect(types(r)).toEqual(["signal_lost"]);
   });
+
+  it("reports a take-off even before there is a minute of history", () => {
+    const track = fly([{ sec: 14, onGround: true }, { sec: 21, climbFpm: 2000 }], {
+      lat: -33.946098,
+      lon: 151.177002,
+      altFt: 0,
+      onGround: true,
+      gsKt: 150,
+    });
+    const r = runAll(track, ctxFor(track));
+    expect(r.status).toBe("insufficient_history");
+    expect(types(r)).toEqual(["takeoff"]);
+  });
 });
+

@@ -35,4 +35,21 @@ describe("detectSignalLost", () => {
     const d = detectSignalLost([], ctxFor([], { lastPosTs: 1000, now: 1200 }));
     expect(d?.evidence).toEqual({ secondsSinceLastPosition: 200 });
   });
+
+  it("adds vertical state and the nearest airport when close to one", () => {
+    const approach = fly([{ sec: 63, climbFpm: -800 }], { lat: -33.946, lon: 151.0, altFt: 2000 });
+    const end = approach.at(-1)!;
+    const d = detectSignalLost(approach, ctxFor(approach, { now: end.t + 120 }));
+    expect(d!.evidence).toMatchObject({ lastVertical: "descending", nearAirport: "YSSY" });
+    expect(Number(d!.evidence.nearAirportKm)).toBeGreaterThan(5);
+    expect(Number(d!.evidence.nearAirportKm)).toBeLessThan(10);
+  });
+
+  it("leaves out the airport when none is within nearAirportKm", () => {
+    const far = fly([{ sec: 63 }], { lat: -34.6, lon: 151.6 });
+    const d = detectSignalLost(far, ctxFor(far, { now: far.at(-1)!.t + 120 }));
+    expect(d!.evidence).toMatchObject({ lastVertical: "level" });
+    expect(d!.evidence.nearAirport).toBeUndefined();
+  });
 });
+

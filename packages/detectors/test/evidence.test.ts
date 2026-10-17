@@ -95,6 +95,39 @@ describe("describeEvidence", () => {
     ]);
   });
 
+  it("take-off", () => {
+    expect(
+      describeEvidence(det("takeoff", { at: T0, airport: "YSSY", airportName: "Sydney Kingsford Smith International Airport", airportKm: 1.24, altFt: 620 })),
+    ).toEqual([
+      "The aircraft reported being on the ground, then airborne from 12:20 pm.",
+      "About 1.2 km from Sydney Kingsford Smith International Airport.",
+      "It had climbed to 600 ft a few reports later.",
+    ]);
+    expect(describeEvidence(det("takeoff", { at: T0 }))).toContain("Not near any airport in our list.");
+  });
+
+  it("landing", () => {
+    expect(describeEvidence(det("landing", { at: T0, airport: "YSBK", airportName: "Sydney Bankstown Airport", airportKm: 0.8 }))).toEqual([
+      "The aircraft reported being airborne, then on the ground from 12:20 pm.",
+      "About 0.8 km from Sydney Bankstown Airport.",
+    ]);
+  });
+
+  it("signal lost near an airport says where it was last seen, never that it landed", () => {
+    const lines = describeEvidence(
+      det("signal_lost", {
+        secondsSinceLastPosition: 180,
+        lastAltFt: 1200,
+        lastVertical: "descending",
+        nearAirport: "YSSY",
+        nearAirportName: "Sydney Kingsford Smith International Airport",
+        nearAirportKm: 8.3,
+      }),
+    );
+    expect(lines).toContain("Last seen about 8 km from Sydney Kingsford Smith International Airport, descending.");
+    expect(lines.join(" ")).not.toMatch(/landed/i);
+  });
+
   it("leaves out anything the evidence doesn't contain", () => {
     expect(describeEvidence(det("climb", {}))).toEqual([]);
     expect(describeEvidence(det("signal_lost", { secondsSinceLastPosition: 90 }))).toEqual([

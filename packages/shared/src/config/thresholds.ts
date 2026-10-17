@@ -51,6 +51,13 @@ export interface Thresholds {
     revertWithinSamples: number;
     revertToleranceFt: number;
   };
+  takeoffLanding: {
+    confirmObs: number;
+    minClimbFt: number;
+    maxTouchdownAltFt: number;
+    airportRadiusKm: number;
+    nearAirportKm: number;
+  };
   gap: { thresholdSec: number };
   signalLost: { afterSec: number };
   lifecycle: { closeAfterSec: number; reopenCooldownSec: number };
@@ -105,6 +112,13 @@ export const THRESHOLDS = {
     spikeRateFpm: 20000,
     revertWithinSamples: 2,
     revertToleranceFt: 300,
+  },
+  takeoffLanding: {
+    confirmObs: 3, // reports needed after a ground/airborne change before we believe it
+    minClimbFt: 200, // altitude gained after take-off, to ignore flickering ground flags
+    maxTouchdownAltFt: 2000, // a "ground" report from higher than this is not a landing
+    airportRadiusKm: 5, // "near {airport}" for take-off and landing
+    nearAirportKm: 20, // "last seen about N km from {airport}" for lost signals
   },
   gap: { thresholdSec: 60 },
   signalLost: { afterSec: 60 },

@@ -381,6 +381,7 @@ export const THRESHOLDS = {
   poll: { intervalMs: 7000, timeoutMs: 5000, maxBackoffMs: 60000, radiusNm: 60, centre: { lat: -33.9, lon: 151.0 } },
   buffer: { keepSec: 900 },
   writer: { flushMs: 5000, maxRows: 500 },
+  sse: { heartbeatMs: 15000, maxBufferedBytes: 1000000 },
   hygiene: {
     maxImpliedGsKt: 1000,       // drop position jumps faster than this
     minPoints: 4,
@@ -630,13 +631,15 @@ Headers: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connecti
 
 Events:
 ```
-event: snapshot      data: { now, feedStatus, aircraft: CompactAircraft[] }   // on connect and every poll
+event: snapshot      data: { now, mode: "live", feedStatus, aircraft: CompactAircraft[] }   // on connect and every poll
 event: event_open    data: BehaviourEvent
 event: event_update  data: BehaviourEvent
 event: event_close   data: { id, hex, closedAt }
-event: status        data: { feedStatus: "ok" | "degraded" | "down", lastPollAt }
+event: status        data: { feedStatus: "ok" | "degraded" | "down", lastPollAt }   // on connect and when it changes
 ```
-`CompactAircraft` = `[hex, callsign, lat, lon, altFt, gsKt, trackDeg, baroRateFpm, typeCode, category, lastPosTs, hasOpenEvent]` to keep payloads small.
+`CompactAircraft` = `[hex, callsign, lat, lon, altFt, gsKt, trackDeg, baroRateFpm, typeCode, category, lastPosTs, hasOpenEvent, onGround]` to keep payloads small. `onGround` is needed because `altFt` 0 alone can't tell a taxiing aircraft from one at 0 ft. Encode/decode with `toCompact` / `fromCompact` in `packages/shared/src/compact.ts`.
+- On each poll, event messages are sent before the snapshot. `lastPollAt` is epoch ms.
+- Clients more than `sse.maxBufferedBytes` behind are disconnected. Open streams are closed on shutdown.
 
 ## 12. Frontend (`apps/web`)
 

@@ -5,6 +5,8 @@ export interface PollerOptions {
   intervalMs: number;
   maxBackoffMs: number;
   onError: (err: unknown, consecutiveFailures: number) => void;
+  /** Called when feedStatus changes (not on every poll). */
+  onStatusChange?: (status: PollerStatus) => void;
 }
 
 export interface PollerStatus {
@@ -23,19 +25,25 @@ export function createPoller(opts: PollerOptions) {
   let inFlight: Promise<void> | undefined;
   const status: PollerStatus = { feedStatus: "degraded", lastPollAt: null, consecutiveFailures: 0 };
 
+  function setFeedStatus(next: FeedStatus) {
+    const changed = status.feedStatus !== next;
+    status.feedStatus = next;
+    if (changed) opts.onStatusChange?.({ ...status });
+  }
+
   async function tick() {
     const started = Date.now();
     let delay: number;
     try {
       inFlight = opts.run();
       await inFlight;
-      status.feedStatus = "ok";
       status.lastPollAt = Date.now();
       status.consecutiveFailures = 0;
+      setFeedStatus("ok");
       delay = Math.max(0, opts.intervalMs - (Date.now() - started));
     } catch (err) {
-      status.feedStatus = "down";
       status.consecutiveFailures++;
+      setFeedStatus("down");
       opts.onError(err, status.consecutiveFailures);
       delay = Math.min(opts.maxBackoffMs, opts.intervalMs * 2 ** status.consecutiveFailures);
     } finally {

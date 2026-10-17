@@ -130,6 +130,28 @@ describe("poller", () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
+  it("reports status changes only when the status changes", async () => {
+    let fail = false;
+    const onStatusChange = vi.fn();
+    const p = createPoller({
+      run: async () => {
+        if (fail) throw new Error("boom");
+      },
+      intervalMs: INTERVAL,
+      maxBackoffMs: MAX_BACKOFF,
+      onError: () => {},
+      onStatusChange,
+    });
+    p.start();
+    await vi.advanceTimersByTimeAsync(INTERVAL * 2); // 3 successful polls
+    fail = true;
+    await vi.advanceTimersByTimeAsync(INTERVAL + 14000); // 2 failures
+    fail = false;
+    await vi.advanceTimersByTimeAsync(28000); // recovers
+    expect(onStatusChange.mock.calls.map(([s]) => s.feedStatus)).toEqual(["ok", "down", "ok"]);
+    await p.stop();
+  });
+
   it("start() twice does not start a second loop", async () => {
     const run = vi.fn(async () => {});
     const p = make(run);

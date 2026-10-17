@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app";
 import { AircraftStore } from "../src/buffer";
 import type { PollerStatus } from "../src/poller";
+import { SseHub } from "../src/sse";
 import { FakeRepo } from "./fakeRepo";
 import { T0, obs, state } from "./helpers";
 
@@ -16,6 +17,7 @@ function setup(status: PollerStatus = { feedStatus: "ok", lastPollAt: T0 * 1000,
     store,
     lifecycle,
     repo,
+    hub: new SseHub(THRESHOLDS.sse),
     status: () => status,
     nowSec: () => now,
     corsOrigin: ["http://localhost:3000"],

@@ -11,6 +11,8 @@ import { hydrate } from "./hydrate";
 import { createPipeline } from "./pipeline";
 import { createPoller } from "./poller";
 import { ProviderError, createAdsbLolClient } from "./providers/adsblol/client";
+import { SseHub } from "./sse";
+import { changeMessages, snapshotMessage, statusMessage } from "./streamMessages";
 import { createWriter } from "./writer";
 
 loadDotEnv();
@@ -21,6 +23,7 @@ const repo = createPgRepo(db);
 const store = new AircraftStore(THRESHOLDS);
 const lifecycle = new EventLifecycle({ thresholds: THRESHOLDS, mode: "live", newId: randomUUID });
 const engine = createEventEngine({ store, lifecycle, thresholds: THRESHOLDS });
+const hub = new SseHub(THRESHOLDS.sse);
 
 // Provider clock of the latest successful poll; drives track windows.
 let lastPollNow: number | null = null;
@@ -33,6 +36,9 @@ const poller = createPoller({
     const parsed = await client.fetchPoint({ ...THRESHOLDS.poll.centre, radiusNm: THRESHOLDS.poll.radiusNm });
     const result = pipeline.handle(parsed);
     lastPollNow = result.now;
+    for (const [event, data] of changeMessages(result.changes)) hub.broadcast(event, data);
+    const [event, data] = snapshotMessage({ store, lifecycle, feedStatus: "ok", now: result.now });
+    hub.broadcast(event, data);
     const { opened, updated, closed } = result.changes;
     app.log.debug(
       {
@@ -40,6 +46,7 @@ const poller = createPoller({
         newPositions: result.newPositions,
         skipped: result.skipped,
         events: { opened: opened.length, updated: updated.length, closed: closed.length },
+        streamClients: hub.size,
       },
       "Poll ok",
     );
@@ -48,12 +55,18 @@ const poller = createPoller({
     const detail = err instanceof ProviderError ? { kind: err.kind, status: err.status, message: err.message } : { err };
     app.log.warn({ ...detail, consecutiveFailures }, "Poll failed; keeping last known positions");
   },
+  onStatusChange: (status) => {
+    app.log.info({ feedStatus: status.feedStatus }, "Feed status changed");
+    const [event, data] = statusMessage(status);
+    hub.broadcast(event, data);
+  },
 });
 
 const app = buildApp({
   store,
   lifecycle,
   repo,
+  hub,
   status: poller.status,
   nowSec,
   corsOrigin: env.CORS_ORIGIN,
@@ -77,6 +90,7 @@ app.log.info(
 
 await app.listen({ port: env.PORT, host: env.HOST });
 writer.start();
+hub.start();
 poller.start();
 
 let shuttingDown = false;
@@ -85,6 +99,7 @@ async function shutdown(signal: string) {
   shuttingDown = true;
   app.log.info({ signal }, "Shutting down");
   await poller.stop();
+  hub.stop();
   await writer.stop();
   await app.close();
   await closeDb();

@@ -11,6 +11,7 @@ export interface Thresholds {
   };
   buffer: { keepSec: number };
   writer: { flushMs: number; maxRows: number };
+  sse: { heartbeatMs: number; maxBufferedBytes: number };
   hygiene: {
     maxImpliedGsKt: number;
     minPoints: number;
@@ -58,6 +59,7 @@ export const THRESHOLDS = {
   },
   buffer: { keepSec: 900 }, // also: drop an aircraft this long after its last position
   writer: { flushMs: 5000, maxRows: 500 }, // batch positions, whichever comes first
+  sse: { heartbeatMs: 15000, maxBufferedBytes: 1_000_000 }, // drop clients that fall this far behind
   hygiene: {
     maxImpliedGsKt: 1000, // drop position jumps faster than this
     minPoints: 4,

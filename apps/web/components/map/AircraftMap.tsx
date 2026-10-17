@@ -4,11 +4,26 @@ import { THRESHOLDS } from "@aerotrack/shared";
 import { setWorkerUrl, type GeoJSONSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useCallback, useEffect, useRef, useState } from "react";
-import Map, { AttributionControl, Layer, NavigationControl, Source, type MapRef } from "react-map-gl/maplibre";
+import Map, {
+  AttributionControl,
+  Layer,
+  NavigationControl,
+  Source,
+  type MapLayerMouseEvent,
+  type MapRef,
+} from "react-map-gl/maplibre";
 import { buildAircraftFeatures } from "../../lib/aircraftFeatures";
 import { DATA_ATTRIBUTION, MAP_STYLE_URL, SYDNEY_VIEW } from "../../lib/config";
+import { trackFeature } from "../../lib/trackFeature";
 import { useAircraftStore } from "../../store/aircraftStore";
-import { AIRCRAFT_SOURCE, aircraftLayer, eventBadgeLayer } from "./aircraftLayer";
+import {
+  AIRCRAFT_SOURCE,
+  TRACK_SOURCE,
+  aircraftLayer,
+  eventBadgeLayer,
+  selectedLayer,
+  trackLayer,
+} from "./aircraftLayer";
 import { addAircraftIcons } from "./icons";
 
 // Served from /public (copied by scripts/copy-maplibre-worker.mjs).
@@ -16,13 +31,53 @@ setWorkerUrl("/maplibre-gl-worker.mjs");
 
 const EMPTY = { type: "FeatureCollection" as const, features: [] };
 
+// Panel sizes from DetailsPanel: bottom 55% on mobile, 24rem (+ margin) on the right from md.
+const MD_BREAKPOINT_PX = 768;
+const DESKTOP_PANEL_PX = 408;
+const MOBILE_PANEL_SHARE = 0.55;
+
+/** If the tapped aircraft would sit under the details panel, ease it into view. */
+function revealUnderPanel(e: MapLayerMouseEvent) {
+  const map = e.target;
+  const { width, height } = map.getContainer().getBoundingClientRect();
+  const mobile = width < MD_BREAKPOINT_PX;
+  const covered = mobile ? e.point.y > height * (1 - MOBILE_PANEL_SHARE) : e.point.x > width - DESKTOP_PANEL_PX;
+  if (!covered) return;
+  map.easeTo({
+    center: e.lngLat,
+    padding: mobile ? { bottom: height * MOBILE_PANEL_SHARE } : { right: DESKTOP_PANEL_PX },
+    duration: 600,
+  });
+}
+
 export default function AircraftMap() {
   const mapRef = useRef<MapRef>(null);
   const [iconsReady, setIconsReady] = useState(false);
+  const [cursor, setCursor] = useState<string>("");
+  const selectedHex = useAircraftStore((s) => s.selectedHex);
+  const segments = useAircraftStore((s) => s.selection.segments);
+  const select = useAircraftStore((s) => s.select);
+  const track = trackFeature(segments) ?? EMPTY;
+
+  // Click an aircraft to select it; click empty map to clear.
+  const onClick = useCallback(
+    (e: MapLayerMouseEvent) => {
+      const hex = e.features?.[0]?.properties?.hex;
+      if (typeof hex !== "string") return select(null);
+      select(hex);
+      revealUnderPanel(e);
+    },
+    [select],
+  );
 
   const onLoad = useCallback(async () => {
     const map = mapRef.current?.getMap();
     if (!map) return;
+    // The basemap style references a few sprite icons its sprite sheet lacks
+    // (e.g. "circle-11"). Give them a blank image instead of console warnings.
+    map.on("styleimagemissing", ({ id }) => {
+      if (!map.hasImage(id)) map.addImage(id, { width: 1, height: 1, data: new Uint8Array(4) });
+    });
     await addAircraftIcons(map);
     setIconsReady(true);
   }, []);
@@ -53,15 +108,26 @@ export default function AircraftMap() {
       mapStyle={MAP_STYLE_URL}
       attributionControl={false}
       onLoad={onLoad}
+      interactiveLayerIds={iconsReady ? [aircraftLayer.id] : []}
+      onClick={onClick}
+      onMouseEnter={() => setCursor("pointer")}
+      onMouseLeave={() => setCursor("")}
+      cursor={cursor}
       style={{ position: "absolute", inset: 0 }}
     >
       <AttributionControl customAttribution={DATA_ATTRIBUTION} compact={false} position="bottom-right" />
-      <NavigationControl position="top-right" showCompass={false} />
+      <NavigationControl position="top-left" showCompass={false} />
       {iconsReady && (
-        <Source id={AIRCRAFT_SOURCE} type="geojson" data={EMPTY}>
-          <Layer {...aircraftLayer} />
-          <Layer {...eventBadgeLayer} />
-        </Source>
+        <>
+          <Source id={TRACK_SOURCE} type="geojson" data={track}>
+            <Layer {...trackLayer} />
+          </Source>
+          <Source id={AIRCRAFT_SOURCE} type="geojson" data={EMPTY}>
+            <Layer {...selectedLayer(selectedHex)} />
+            <Layer {...aircraftLayer} />
+            <Layer {...eventBadgeLayer} />
+          </Source>
+        </>
       )}
     </Map>
   );

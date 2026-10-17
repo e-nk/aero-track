@@ -83,6 +83,15 @@ describe("api routes", () => {
     expect(body.recentEvents.map((e: { id: string }) => e.id)).toEqual(["old"]);
   });
 
+  it("GET /api/aircraft/:hex says when there isn't enough history for insights", async () => {
+    const { app, store } = setup();
+    close = () => app.close();
+    track(store, "7c0001", [T0, T0 + 7]);
+    expect((await app.inject("/api/aircraft/7c0001")).json().history).toBe("insufficient_history");
+    track(store, "7c0001", [T0 + 14, T0 + 21, T0 + 63]);
+    expect((await app.inject("/api/aircraft/7c0001")).json().history).toBe("ok");
+  });
+
   it("GET /api/aircraft/:hex is 404 for an aircraft we can't see", async () => {
     const { app } = setup();
     close = () => app.close();

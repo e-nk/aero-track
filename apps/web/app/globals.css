@@ -28,3 +28,8 @@ body {
   text-decoration: underline;
   text-decoration-color: rgb(233 241 249 / 0.35);
 }
+
+/* Zoom buttons sit below the header pills, clear of the details panel. */
+.maplibregl-map .maplibregl-ctrl-top-left {
+  top: 3.25rem;
+}

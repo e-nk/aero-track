@@ -1,7 +1,8 @@
-import type { CircleLayerSpecification, SymbolLayerSpecification } from "maplibre-gl";
+import type { CircleLayerSpecification, LineLayerSpecification, SymbolLayerSpecification } from "maplibre-gl";
 import { PALETTE } from "../../lib/palette";
 
 export const AIRCRAFT_SOURCE = "aircraft";
+export const TRACK_SOURCE = "selected-track";
 
 // One symbol layer for every aircraft (SPEC 12.3). No HTML markers.
 export const aircraftLayer: SymbolLayerSpecification = {
@@ -46,4 +47,27 @@ export const eventBadgeLayer: CircleLayerSpecification = {
     "circle-translate": [10, -10],
     "circle-translate-anchor": "viewport",
   },
+};
+
+// Ring around the selected aircraft.
+export const selectedLayer = (hex: string | null): CircleLayerSpecification => ({
+  id: "aircraft-selected",
+  type: "circle",
+  source: AIRCRAFT_SOURCE,
+  filter: ["==", ["get", "hex"], hex ?? ""],
+  paint: {
+    "circle-radius": 16,
+    "circle-color": "rgba(0,0,0,0)",
+    "circle-stroke-color": PALETTE.sky,
+    "circle-stroke-width": 2,
+  },
+});
+
+// Selected aircraft's recent track. A MultiLineString, so gaps stay gaps.
+export const trackLayer: LineLayerSpecification = {
+  id: "selected-track",
+  type: "line",
+  source: TRACK_SOURCE,
+  layout: { "line-cap": "round", "line-join": "round" },
+  paint: { "line-color": PALETTE.sky, "line-width": 2, "line-opacity": 0.8 },
 };

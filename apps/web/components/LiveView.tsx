@@ -4,13 +4,17 @@ import dynamic from "next/dynamic";
 import { useEffect } from "react";
 import { API_URL } from "../lib/config";
 import { connectLive } from "../lib/sse";
+import { useSelectedAircraft } from "../lib/useSelectedAircraft";
 import { useAircraftStore } from "../store/aircraftStore";
 import { ModeBadge } from "./ModeBadge";
+import { DetailsPanel } from "./panel/DetailsPanel";
 
 // MapLibre needs the browser (WebGL), so skip server rendering for the map.
 const AircraftMap = dynamic(() => import("./map/AircraftMap"), { ssr: false });
 
 export function LiveView() {
+  useSelectedAircraft();
+
   useEffect(() => {
     const { handlers, reset } = useAircraftStore.getState();
     const disconnect = connectLive(`${API_URL}/api/stream`, handlers);
@@ -31,6 +35,7 @@ export function LiveView() {
           <ModeBadge />
         </div>
       </header>
+      <DetailsPanel />
     </main>
   );
 }

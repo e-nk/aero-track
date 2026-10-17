@@ -17,6 +17,7 @@ export interface Thresholds {
     sourceUpdateMs: number;
     staleAfterSec: number;
     altitudeBandsFt: readonly [number, number];
+    levelRateFpm: number;
   };
   hygiene: {
     maxImpliedGsKt: number;
@@ -71,6 +72,7 @@ export const THRESHOLDS = {
     sourceUpdateMs: 100, // map source updates at most 10 times per second
     staleAfterSec: 30, // badge turns amber / aircraft dims after this long without news
     altitudeBandsFt: [10000, 25000], // colour bands: low < 10,000 ≤ mid < 25,000 ≤ high
+    levelRateFpm: 100, // vertical rates this small read as "Level" in the details panel
   },
   hygiene: {
     maxImpliedGsKt: 1000, // drop position jumps faster than this

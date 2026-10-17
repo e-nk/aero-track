@@ -1,8 +1,8 @@
 "use client";
 
 import { THRESHOLDS } from "@aerotrack/shared";
-import { useEffect, useState } from "react";
 import { liveBadge, type BadgeTone } from "../lib/badge";
+import { useNow } from "../lib/useNow";
 import { useAircraftStore } from "../store/aircraftStore";
 
 const DOT: Record<BadgeTone, string> = {
@@ -15,15 +15,7 @@ const DOT: Record<BadgeTone, string> = {
 /** Always-visible data mode badge (SPEC 12.2). */
 export function ModeBadge() {
   const state = useAircraftStore();
-  // Read the clock only in the browser, after mount (never during prerender).
-  const [now, setNow] = useState<number | null>(null);
-
-  useEffect(() => {
-    const tick = () => setNow(Date.now());
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
+  const now = useNow();
 
   const badge = liveBadge(state, now ?? state.lastSnapshotAt ?? 0, THRESHOLDS.display.staleAfterSec);
   return (

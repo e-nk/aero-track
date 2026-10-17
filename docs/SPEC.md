@@ -382,7 +382,7 @@ export const THRESHOLDS = {
   buffer: { keepSec: 900 },
   writer: { flushMs: 5000, maxRows: 500 },
   sse: { heartbeatMs: 15000, maxBufferedBytes: 1000000 },
-  display: { interpolateMaxSec: 15, sourceUpdateMs: 100, staleAfterSec: 30, altitudeBandsFt: [10000, 25000] },
+  display: { interpolateMaxSec: 15, sourceUpdateMs: 100, staleAfterSec: 30, altitudeBandsFt: [10000, 25000], levelRateFpm: 100 },
   hygiene: {
     maxImpliedGsKt: 1000,       // drop position jumps faster than this
     minPoints: 4,
@@ -618,7 +618,7 @@ recordings: id (text pk), title, source, attribution, captured_from, captured_to
 |---|---|---|
 | GET | `/health` | `{ ok, feedStatus, lastPollAt, aircraftCount }` |
 | GET | `/api/aircraft` | Current snapshot: `AircraftState[]` |
-| GET | `/api/aircraft/:hex` | `{ state, openEvents, recentEvents }` |
+| GET | `/api/aircraft/:hex` | `{ state, history: "ok" \| "insufficient_history", openEvents, recentEvents }` |
 | GET | `/api/aircraft/:hex/track?minutes=15` | `{ segments: Observation[][] }` from the in-memory buffer (minutes 1-15), cleaned and split at gaps by `preprocess` |
 | GET | `/api/events?hex=&status=&since=` | `BehaviourEvent[]` |
 | GET | `/api/search?q=` | Matches by callsign, registration, type, or flight number via prefix. Each with `freshness`: `live`, `last_seen_<n>m`, `not_seen` |
@@ -672,7 +672,11 @@ event: status        data: { feedStatus: "ok" | "degraded" | "down", lastPollAt 
 ### 12.4 Details panel
 - Identity: callsign, registration, type (code + description). The live API has no `desc`, so live `typeDesc` is null ("Not available") unless a static type-code table is added later. Archive imports may fill it from the trace's top-level `desc`.
 - Now: altitude, speed, heading, vertical rate, last position time ("12 s ago").
-- Insights: most recent open event card, then timeline (P1).
+- Insights: all open event cards, newest first, then timeline (P1). Titles in `apps/web/lib/eventCopy.ts`; "possible" events get an amber "Possible" chip.
+- On selection the panel loads `/api/aircraft/:hex` and the track, and refreshes both after every snapshot. Open events from the detail response seed the store, because the stream only sends changes made after the browser connected.
+- With enough history and no open events: "No notable changes in the last few minutes."
+- "How we know" uses `describeEvidence` from `packages/detectors/src/evidence.ts` (facts only; lines with missing evidence are left out).
+- Selection: click an aircraft (ring highlight), click empty map or press Escape to clear. If the panel would cover the tapped aircraft, the map eases it into view. The panel never covers the map attribution.
 - Any missing field: "Not available from this source".
 - Insufficient history: "Insights appear after about a minute of observations."
 

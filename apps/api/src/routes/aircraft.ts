@@ -29,6 +29,8 @@ export const aircraftRoutes =
       if (!state) return notFound(reply);
       return {
         state,
+        // Same rule the detectors use: insights need about a minute of clean history.
+        history: preprocess(store.track(hex), THRESHOLDS).status,
         openEvents: lifecycle.openEvents(hex),
         recentEvents: await repo.recentEvents(hex, RECENT_EVENTS_LIMIT),
       };

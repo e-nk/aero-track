@@ -68,3 +68,18 @@ export function applyEventClose(s: LiveState, data: { id: string; hex: string; c
   delete events[data.id];
   return { ...s, events };
 }
+
+/** Replace one aircraft's open events with the server's list (events opened before we connected). */
+export function applyEventsSeed(s: LiveState, hex: string, events: BehaviourEvent[]): LiveState {
+  const next: Record<string, BehaviourEvent> = {};
+  for (const [id, e] of Object.entries(s.events)) if (e.hex !== hex) next[id] = e;
+  for (const e of events) if (e.hex === hex && e.mode === "live" && e.status === "open") next[e.id] = e;
+  return { ...s, events: next };
+}
+
+/** An aircraft's open events, newest first. */
+export function openEventsFor(events: Record<string, BehaviourEvent>, hex: string): BehaviourEvent[] {
+  return Object.values(events)
+    .filter((e) => e.hex === hex)
+    .sort((a, b) => b.openedAt - a.openedAt);
+}

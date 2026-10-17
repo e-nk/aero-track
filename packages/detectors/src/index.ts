@@ -10,6 +10,7 @@ export type { HistoryStatus, Preprocessed } from "./preprocess";
 export { preprocess } from "./preprocess";
 export { dHeading, distanceNm } from "./geo";
 export { explain, formatDuration } from "./explain";
+export { describeEvidence } from "./evidence";
 export { EventLifecycle, type LifecycleChanges, type LifecycleOptions } from "./lifecycle";
 
 export interface RunResult {

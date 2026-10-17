@@ -1,5 +1,5 @@
 import { DISPLAY_TIME_ZONE, type Detection, type Explanation } from "@aerotrack/shared";
-import { NA, amount, clock, duration } from "./format";
+import { NA, amount, clock, duration, spreadFt } from "./format";
 
 export { formatDuration } from "./format";
 
@@ -42,7 +42,7 @@ export function explain(d: Detection, opts: ExplainOptions = {}): Explanation {
     case "circling":
       return {
         // "within" is an upper bound, so the spread rounds up.
-        seen: `This aircraft has turned through ${amount(e.totalDeg, 1)}° in ${duration(e.spanSec)}, staying within ${amount(e.altSpreadFt, 100, Math.ceil)} ft of the same altitude.`,
+        seen: `This aircraft has turned through ${amount(e.totalDeg, 1)}° in ${duration(e.spanSec)}, staying within ${spreadFt(e.altSpreadFt)} ft of the same altitude.`,
         commonly: "Aircraft sometimes fly circular patterns while waiting.",
         cannotTell: "The data alone can't confirm that it is waiting, or why.",
       };

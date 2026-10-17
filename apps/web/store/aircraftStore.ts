@@ -33,6 +33,7 @@ export interface ReplayInfo {
   playing: boolean;
   attribution: string;
   reportedCause: RecordingFile["reportedCause"];
+  mode: RecordingFile["mode"];
 }
 
 interface AircraftStore extends LiveState {

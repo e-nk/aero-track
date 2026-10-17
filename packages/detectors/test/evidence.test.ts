@@ -47,6 +47,10 @@ describe("describeEvidence", () => {
     ).toEqual(["Turned through 412° in total, about 1 full circle.", "Over 5 minutes.", "Altitude stayed within 200 ft."]);
   });
 
+  it("circling altitude spread is at least 100 ft", () => {
+    expect(describeEvidence(det("circling", { totalDeg: 540, spanSec: 360, altSpreadFt: 0 }))).toContain("Altitude stayed within 100 ft.");
+  });
+
   it("rapid descent", () => {
     expect(
       describeEvidence(

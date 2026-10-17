@@ -44,7 +44,16 @@ const replayTime = new Intl.DateTimeFormat("en-AU", {
 });
 
 /** Recorded mode badge (SPEC 12.2): "Recorded flight · {date, time} · {speed}x · Data: ADSB.lol (ODbL)". */
-export function recordedBadge(r: { clock: number; speed: number; attribution: string; playing: boolean }): Badge {
+export function recordedBadge(r: {
+  clock: number;
+  speed: number;
+  attribution: string;
+  playing: boolean;
+  mode?: "recorded" | "fixture";
+}): Badge {
+  const pace = r.playing ? `${r.speed}x` : "paused";
+  // SPEC 12.2: synthetic fixtures must never look like real flights.
+  if (r.mode === "fixture") return { tone: "stale", text: `Synthetic test case · not a real aircraft · ${pace}` };
   const when = replayTime.format(new Date(r.clock * 1000)).replace(/\s?(am|pm)$/i, (m) => m.toLowerCase().replace(/^\s?/, " "));
-  return { tone: "live", text: `Recorded flight · ${when} · ${r.playing ? `${r.speed}x` : "paused"} · ${r.attribution}` };
+  return { tone: "live", text: `Recorded flight · ${when} · ${pace} · ${r.attribution}` };
 }

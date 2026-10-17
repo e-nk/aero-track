@@ -14,6 +14,12 @@ export function amount(v: EvidenceValue, step: number, round = Math.round): stri
   return n === null ? NA : numberFormat.format(round(Math.abs(n) / step) * step);
 }
 
+/** "within N ft" is an upper bound: round up, and never claim less than 100 ft. */
+export function spreadFt(v: EvidenceValue): string {
+  const n = num(v);
+  return n === null ? NA : amount(Math.max(100, n), 100, Math.ceil);
+}
+
 /** "40 seconds" (nearest 10 s) under a minute, otherwise "3 minutes" (nearest minute). */
 export function formatDuration(sec: number): string {
   const tens = Math.round(sec / 10) * 10;

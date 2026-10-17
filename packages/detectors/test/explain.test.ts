@@ -58,6 +58,12 @@ describe("explain", () => {
     ).toBe("This aircraft has turned through 412° in 5 minutes, staying within 200 ft of the same altitude.");
   });
 
+  it("circling never claims less than 'within 100 ft'", () => {
+    expect(explain(det("circling", { totalDeg: 540, spanSec: 360, altSpreadFt: 0 })).seen).toBe(
+      "This aircraft has turned through 540° in 6 minutes, staying within 100 ft of the same altitude.",
+    );
+  });
+
   it("rapid descent has no 'commonly' part", () => {
     const e = explain(det("rapid_descent", { peakRateFpm: -6040 }));
     expect(e.seen).toBe("This aircraft is descending unusually quickly, about 6,000 ft per minute.");

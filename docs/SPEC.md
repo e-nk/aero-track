@@ -487,7 +487,7 @@ Used for live captures, archive imports and test fixtures. Stored in Postgres (`
 - `points` tuple: `[t, lat, lon, altFt|null, gsKt|null, trackDeg|null, baroRateFpm|null, onGround, squawk|null]`. `onGround` is needed for take-off/landing replay; `squawk` for the emergency detector. Barometric altitude only (never GPS), like the live detectors.
 - Exported from `positions` (live mode) and `aircraft` identity for a time window, optionally limited to some hexes. The callsign is the one broadcast during the window (`positions.callsign`), never a later one: the same aircraft often flies in and out under different flight numbers. For rows saved before callsigns were stored, the aircraft's stored callsign is used only if it wasn't seen again more than 15 minutes after the window; otherwise "Not available". `capturedFrom`/`capturedTo` are trimmed to the first and last point inside the requested window, so a replay never opens on an empty map.
 - `reportedCause` (optional): `{ "text": "...", "sourceUrl": "...", "sourceName": "..." }`. Shown separately as "Later reported as ... [source]". Never mixed into detector output.
-- Fixture files use `"mode": "fixture"` and fake callsigns like `TEST01`.
+- Fixture files use `"mode": "fixture"` and fake callsigns like `TEST01`. `pnpm --filter web fixture:recording` writes `public/recordings/fixture-p1-detectors.json` (a racetrack hold, a rapid descent, a 7700 squawk) because real Sydney data rarely shows these. In the app a fixture is always labelled: amber badge "Synthetic test case · not a real aircraft", a "Synthetic" chip in the list, "Synthetic data, not a real aircraft" in the panel, and its own attribution on the map (never ADSB.lol).
 
 ## 9. Detectors (`packages/detectors`)
 
@@ -541,7 +541,7 @@ export const dHeading = (a: number, b: number) => ((b - a + 540) % 360) - 180; /
 ### 9.4 Possible circling (P1)
 - Window: last `circling.windowSec`.
 - Sum signed `dHeading` (all steps).
-- Trigger: `|sum| >= minCumulativeDeg` AND at least `sameDirectionShare` of steps share the sign.
+- Trigger: `|sum| >= minCumulativeDeg` AND at least `sameDirectionShare` of the turning steps (`|d| >= turn.ignoreStepBelowDeg`) share the sign. Straight steps don't count against the share, so racetrack holding patterns with straight legs qualify. On-ground points are ignored.
 - Evidence: `totalDeg`, `laps` (floor of |sum| / 360), `spanSec`, `altSpreadFt`, `direction`.
 - Confidence: `possible`.
 - When circling is open, suppress separate `turn` events for the same window.
@@ -599,7 +599,7 @@ export const dHeading = (a: number, b: number) => ((b - a + 540) % 360) - 180; /
 
 ## 10. Explanation templates (`packages/detectors/src/explain.ts`)
 
-Each returns `{ seen, commonly?, cannotTell }`. Fill only from evidence; a missing value renders "Not available". Round numbers for humans (altitudes to nearest 100 ft, rates to nearest 100 fpm, times to nearest 10 s under a minute, otherwise nearest minute). Exception: "staying within {altSpreadFt} ft" is an upper bound, so it rounds up to the next 100 ft. Clock times use `DISPLAY_TIME_ZONE` (Australia/Sydney) from `packages/shared/src/config/display.ts`, formatted like "12:20 pm".
+Each returns `{ seen, commonly?, cannotTell }`. Fill only from evidence; a missing value renders "Not available". Round numbers for humans (altitudes to nearest 100 ft, rates to nearest 100 fpm, times to nearest 10 s under a minute, otherwise nearest minute). Exception: "staying within {altSpreadFt} ft" is an upper bound, so it rounds up to the next 100 ft and never says less than 100 ft. Clock times use `DISPLAY_TIME_ZONE` (Australia/Sydney) from `packages/shared/src/config/display.ts`, formatted like "12:20 pm".
 
 | Type | seen | commonly | cannotTell |
 |---|---|---|---|

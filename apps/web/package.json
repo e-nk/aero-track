@@ -10,7 +10,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "copy:worker": "node scripts/copy-maplibre-worker.mjs",
-    "offline:assets": "node scripts/fetch-offline-assets.mjs"
+    "offline:assets": "node scripts/fetch-offline-assets.mjs",
+    "fixture:recording": "tsx scripts/make-fixture-recording.ts"
   },
   "dependencies": {
     "@aerotrack/detectors": "workspace:*",
@@ -32,6 +33,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.3",
     "vitest": "^5.0.5"
   }

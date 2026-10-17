@@ -42,7 +42,14 @@ export function RecordingList() {
           {state?.recordings.map((r) => (
             <li key={r.id}>
               <Link href={`/recorded/${r.id}`} className="block rounded-xl border border-white/10 bg-white/[0.03] p-4 hover:bg-white/[0.06]">
-                <span className="block font-medium">{r.title}</span>
+                <span className="block font-medium">
+                  {r.title}
+                  {r.mode === "fixture" && (
+                    <span className="ml-2 rounded-full bg-amber/15 px-2 py-0.5 align-middle text-xs font-medium text-amber">
+                      Synthetic · not real aircraft
+                    </span>
+                  )}
+                </span>
                 <span className="mt-1 block text-sm text-muted">
                   {when.format(new Date(r.capturedFrom * 1000))} · {formatDuration(r.capturedTo - r.capturedFrom)} ·{" "}
                   {r.aircraftCount} aircraft · {r.attribution}

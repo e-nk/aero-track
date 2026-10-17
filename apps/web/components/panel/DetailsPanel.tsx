@@ -63,6 +63,7 @@ export function DetailsPanel() {
   const events = useAircraftStore((s) => s.events);
   const overview = useAircraftStore((s) => s.overview);
   const recorded = useAircraftStore((s) => s.mode === "recorded");
+  const synthetic = useAircraftStore((s) => s.replay?.mode === "fixture");
   const followed = useAircraftStore((s) => !!hex && !!s.follows?.follows.some((f) => f.hex === hex));
   const select = useAircraftStore((s) => s.select);
   const now = useNow();
@@ -116,7 +117,7 @@ export function DetailsPanel() {
 
   return (
     <aside aria-label="Aircraft details" className={PANEL_CLASS}>
-      <PanelHeader title={callsign ?? "Callsign not available"} subtitle={`${recorded ? "Recorded data" : "Live data"} · ${hex}`} onClose={() => select(null)} />
+      <PanelHeader title={callsign ?? "Callsign not available"} subtitle={`${synthetic ? "Synthetic data, not a real aircraft" : recorded ? "Recorded data" : "Live data"} · ${hex}`} onClose={() => select(null)} />
 
       {selection.status === "not_found" && !live ? (
         <p className="text-sm text-text/90">

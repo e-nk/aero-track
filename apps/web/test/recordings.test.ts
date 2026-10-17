@@ -63,6 +63,13 @@ describe("recordedBadge", () => {
     });
   });
 
+  it("makes synthetic test cases unmistakable", () => {
+    expect(recordedBadge({ clock: T0, speed: 10, attribution: "Synthetic data", playing: true, mode: "fixture" })).toEqual({
+      tone: "stale",
+      text: "Synthetic test case · not a real aircraft · 10x",
+    });
+  });
+
   it("says when it's paused", () => {
     expect(recordedBadge({ clock: T0, speed: 1, attribution: "Data: ADSB.lol (ODbL)", playing: false }).text).toBe(
       "Recorded flight · 17 Oct 2026, 12:20 pm · paused · Data: ADSB.lol (ODbL)",

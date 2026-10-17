@@ -47,6 +47,7 @@ export function RecordedView({ id }: { id: string }) {
       playing: true,
       attribution: recording.attribution,
       reportedCause: recording.reportedCause,
+      mode: recording.mode,
     });
 
     const push = () => {

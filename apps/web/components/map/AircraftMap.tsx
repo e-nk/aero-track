@@ -74,7 +74,10 @@ export default function AircraftMap({ initialBounds }: { initialBounds?: [number
   const track = trackFeature(segments) ?? EMPTY;
   // OpenSky attribution only while overview aircraft are shown (rule 9).
   const showsOverview = useAircraftStore((s) => !!s.overview && Object.keys(s.overview.aircraft).length > 0);
-  const attribution = showsOverview ? `${DATA_ATTRIBUTION} · ${OPENSKY_ATTRIBUTION}` : DATA_ATTRIBUTION;
+  // Recordings credit their own source (synthetic fixtures must never be credited to ADSB.lol).
+  const replayAttribution = useAircraftStore((s) => s.replay?.attribution ?? null);
+  const attribution =
+    replayAttribution ?? (showsOverview ? `${DATA_ATTRIBUTION} · ${OPENSKY_ATTRIBUTION}` : DATA_ATTRIBUTION);
 
   // Click an aircraft to select it; click empty map to clear.
   const onClick = useCallback(

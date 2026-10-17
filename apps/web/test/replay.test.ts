@@ -131,3 +131,22 @@ describe("ReplayEngine on a real recording", () => {
     });
   });
 });
+
+describe("ReplayEngine on the synthetic P1 fixture", () => {
+  it("shows possible circling, a rapid descent and an emergency code, all in fixture mode", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { parseRecording } = await import("@aerotrack/shared");
+    const rec = parseRecording(JSON.parse(readFileSync(new URL("../public/recordings/fixture-p1-detectors.json", import.meta.url), "utf8")));
+    expect(rec.mode).toBe("fixture");
+    const e = new ReplayEngine(rec, THRESHOLDS);
+    const opened: { type: string; callsign: string | null; mode: string; confidence: string }[] = [];
+    for (let t = e.start; t <= e.end; t += 10) {
+      for (const ev of e.advanceTo(t).opened) {
+        opened.push({ type: ev.type, callsign: e.identity(ev.hex)?.callsign ?? null, mode: ev.mode, confidence: ev.confidence });
+      }
+    }
+    expect(opened).toContainEqual({ type: "circling", callsign: "TEST01", mode: "fixture", confidence: "possible" });
+    expect(opened).toContainEqual({ type: "rapid_descent", callsign: "TEST02", mode: "fixture", confidence: "observed" });
+    expect(opened).toContainEqual({ type: "emergency", callsign: "TEST03", mode: "fixture", confidence: "fact" });
+  });
+});

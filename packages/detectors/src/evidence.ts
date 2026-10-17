@@ -1,5 +1,5 @@
 import { DISPLAY_TIME_ZONE, type Detection } from "@aerotrack/shared";
-import { amount, clock, duration, num, type EvidenceValue } from "./format";
+import { amount, clock, duration, num, spreadFt, type EvidenceValue } from "./format";
 
 // "How we know": the evidence behind an event, in plain words. Facts only.
 // A line is left out when the evidence it needs is missing.
@@ -47,7 +47,7 @@ export function describeEvidence(d: Detection, opts: EvidenceOptions = {}): stri
           `Turned through ${amount(e.totalDeg, 1)}° in total${laps ? `, about ${laps} full circle${laps === 1 ? "" : "s"}` : ""}.`,
         has(e.spanSec) && `Over ${duration(e.spanSec)}.`,
         // "within" is an upper bound, so round up.
-        has(e.altSpreadFt) && `Altitude stayed within ${amount(e.altSpreadFt, 100, Math.ceil)} ft.`,
+        has(e.altSpreadFt) && `Altitude stayed within ${spreadFt(e.altSpreadFt)} ft.`,
       );
       break;
     }

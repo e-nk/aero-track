@@ -10,7 +10,7 @@ Full spec: `docs/SPEC.md`. Read the relevant section before starting any task.
 - `apps/api`: Node + Fastify, Drizzle ORM, Postgres. Deploys to Railway.
 - `packages/detectors`: pure TS behaviour rules + Vitest tests. Used by BOTH api and web.
 - `packages/shared`: types, Zod schemas, thresholds config.
-- Cloudflare R2: recordings JSON and sydney.pmtiles only.
+- Recordings: JSON in Postgres (jsonb), served by the api; offline copies and sydney.pmtiles in `apps/web/public/`. No separate file host (no Cloudflare R2).
 
 ## Commands
 - `pnpm install`

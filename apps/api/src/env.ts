@@ -19,11 +19,6 @@ const EnvSchema = z.object({
     .default("http://localhost:3000")
     .transform((s) => s.split(",").map((o) => o.trim()).filter(Boolean)),
   ADMIN_TOKEN: optional,
-  R2_ACCOUNT_ID: optional,
-  R2_ACCESS_KEY_ID: optional,
-  R2_SECRET_ACCESS_KEY: optional,
-  R2_BUCKET: optional,
-  R2_PUBLIC_BASE_URL: optional,
   // OpenSky API client for the Australia-wide overview (SPEC 5.8). Both or neither.
   OPENSKY_CLIENT_ID: optional,
   OPENSKY_CLIENT_SECRET: optional,

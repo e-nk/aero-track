@@ -72,7 +72,7 @@ adsb.lol ──(poll 5-10 s, server only)──► apps/api (Railway)
                                 SSE stream ─► apps/web (Vercel) ─► MapLibre
 
 Recorded mode (online or offline):
-  recording JSON (R2 or /public) ─► apps/web replay engine
+  recording JSON (api from Postgres, or /public offline) ─► apps/web replay engine
                                      └► packages/detectors IN THE BROWSER
 ```
 
@@ -294,7 +294,7 @@ Offline (P0): Protomaps PMTiles
   const protocol = new Protocol();
   maplibregl.addProtocol("pmtiles", protocol.tile);
 ```
-- Build the style with `@protomaps/basemaps` layers and source `pmtiles:///offline/sydney.pmtiles` (offline) or the R2 URL (online backup).
+- Build the style with `@protomaps/basemaps` layers and source `pmtiles:///offline/sydney.pmtiles`, served by the web app from `apps/web/public/offline/` (no separate file host).
 - Offline also needs glyphs (fonts) and sprites served locally from `/public/offline/`. Download them from `github.com/protomaps/basemaps-assets`: `fonts/` and `sprites/v4/dark` (also `light`, `white`, `grayscale`, `black`). Without this, labels and icons fail offline.
 - Attribution: Protomaps, © OpenStreetMap contributors.
 
@@ -457,7 +457,7 @@ export const THRESHOLDS = {
 
 ## 8. Recording file format
 
-Used for live captures, archive imports and test fixtures. Served from R2 online and `/public/recordings` offline.
+Used for live captures, archive imports and test fixtures. Stored in Postgres (`recordings.data`, jsonb) and served by the api (`GET /api/recordings/:id`); offline copies live in `apps/web/public/recordings/` with an `index.json` listing them. No separate file host (decided 2026-10-18: Cloudflare R2 would be over-engineering for this project).
 
 ```json
 {
@@ -478,13 +478,14 @@ Used for live captures, archive imports and test fixtures. Served from R2 online
       "typeCode": "B738",
       "category": "A3",
       "points": [
-        [1760684400, -33.71, 151.32, 7000, 230, 182.0, -64]
+        [1760684400, -33.71, 151.32, 7000, 230, 182.0, -64, false, "3245"]
       ]
     }
   ]
 }
 ```
-- `points` tuple: `[t, lat, lon, altFt|null, gsKt|null, trackDeg|null, baroRateFpm|null]`
+- `points` tuple: `[t, lat, lon, altFt|null, gsKt|null, trackDeg|null, baroRateFpm|null, onGround, squawk|null]`. `onGround` is needed for take-off/landing replay; `squawk` for the emergency detector. Barometric altitude only (never GPS), like the live detectors.
+- Exported from `positions` (live mode) and `aircraft` identity for a time window, optionally limited to some hexes.
 - `reportedCause` (optional): `{ "text": "...", "sourceUrl": "...", "sourceName": "..." }`. Shown separately as "Later reported as ... [source]". Never mixed into detector output.
 - Fixture files use `"mode": "fixture"` and fake callsigns like `TEST01`.
 
@@ -655,7 +656,7 @@ positions: id (bigserial pk), hex, t (timestamptz), lat, lon, alt_ft (int null),
 events: id (uuid pk), hex, type, confidence, status, mode, window_start, window_end,
         evidence (jsonb), explanation (jsonb), explanation_source, opened_at, updated_at, closed_at
         index (hex, opened_at), index (status)
-recordings: id (text pk), title, source, attribution, captured_from, captured_to, file_url, reported_cause (jsonb null), created_at
+recordings: id (text pk), title, source, attribution, captured_from, captured_to, aircraft_count (int), data (jsonb: the recording JSON, section 8), reported_cause (jsonb null), created_at
 follows: hex (text pk), added_at, landed_at (null)    -- the shared follow list, saved on every change (11.11)
 sightings: id (uuid pk), hex, started_at, last_seen_at, took_off_at (null), takeoff_airport (null), landed_at (null), landing_airport (null)
            index (hex, started_at)
@@ -699,8 +700,9 @@ sightings: id (uuid pk), hex, started_at, last_seen_at, took_off_at (null), take
 | GET | `/api/aircraft/:hex/track?minutes=15` | `{ segments: Observation[][] }` from the in-memory buffer (minutes 1-15), cleaned and split at gaps by `preprocess` |
 | GET | `/api/events?hex=&status=&since=` | `BehaviourEvent[]` |
 | GET | `/api/search?q=` | Matches by callsign, registration, type, or flight number via prefix. Each with `freshness`: `live`, `last_seen_<n>m`, `not_seen` |
-| GET | `/api/recordings` | List of recordings metadata |
-| POST | `/api/recordings` | Admin only (header `x-admin-token`). Body `{ title, from, to, hexes? }`. Exports window to JSON, uploads to R2 |
+| GET | `/api/recordings` | List of recordings metadata (no points) |
+| GET | `/api/recordings/:id` | The full recording JSON (section 8) |
+| POST | `/api/recordings` | Admin only (header `x-admin-token`, compared in constant time; disabled when `ADMIN_TOKEN` is unset). Body `{ title, from, to, hexes? }` (epoch seconds). Exports the window from Postgres and stores it |
 | GET | `/api/stream` | SSE |
 
 ### 11.8 SSE contract (`/api/stream`)
@@ -764,9 +766,13 @@ event: status        data: { feedStatus: "ok" | "degraded" | "down", lastPollAt 
 ### 12.5 Replay engine (`lib/replay/engine.ts`)
 - Input: recording JSON, speed (1x, 10x, 20x), start offset.
 - Replay clock drives `ctx.now`.
-- Each tick: emit points with `t <= clock`, update per-hex tracks, run `runAll` from `packages/detectors`, apply the same lifecycle rules, render.
+- Each tick: emit points with `t <= clock`, update per-hex tracks, run `runAll` from `packages/detectors`, apply the same lifecycle rules (`EventLifecycle`, mode `recorded`), render.
+- Detectors are evaluated every `poll.intervalMs` of replay time (like the live server), not every frame, so results match what live would have shown.
+- Scrubbing backwards replays from the start up to the new time (recordings are short, so this is instant).
+- The replay writes into the same store shapes as live (aircraft, events) with `mode: "recorded"`; the map and panel are reused. The panel's details and track come from the recording, never the api.
 - Controls: play, pause, speed, scrub.
 - Must work with no network.
+- Routes: `/recorded` lists recordings (api when online, `public/recordings/index.json` when offline or the api is unreachable); `/recorded/[id]` plays one.
 
 ### 12.6 Search and filters (P1)
 - Search input accepts callsign, registration, type, or flight number.
@@ -784,7 +790,7 @@ event: status        data: { feedStatus: "ok" | "degraded" | "down", lastPollAt 
 
 - Env flag `NEXT_PUBLIC_OFFLINE=1` switches the map style to local PMTiles, local fonts and sprites, and disables SSE.
 - Run locally on the demo laptop: `pnpm --filter web build && pnpm --filter web start`.
-- Recordings in `public/recordings`.
+- Recordings in `public/recordings` (`index.json` plus one `{id}.json` per recording), copied there with `pnpm --filter api recording:export -- --out ../web/public/recordings ...`.
 - Test with wifi physically off before the demo.
 
 ## 14. Build phases for Claude Code
@@ -798,12 +804,12 @@ Do these in order. Each ends with its done-criteria passing.
 5. **SSE.** `/api/stream` with snapshot, event and status messages. Done: curl shows live snapshots.
 6. **Web map.** Live map, aircraft layer, interpolation, mode badge, attribution. Done: planes move smoothly over Sydney from local api.
 7. **Details panel + event cards.** Done: selecting an aircraft shows fields and live events with three-part cards and evidence.
-8. **Recordings.** `scripts/export-recording.ts`, `/api/recordings`, R2 upload, replay engine in web, recorded route. Done: a recorded track replays and fires detectors in the browser.
+8. **Recordings.** `scripts/export-recording.ts`, `/api/recordings` (stored in Postgres), replay engine in web, recorded route. Done: a recorded track replays and fires detectors in the browser.
 9. **Offline.** PMTiles extract, local fonts/sprites, offline flag. Done: full replay works with wifi off.
 10. **P1 detectors.** Circling, rapid descent, emergency, timeline. Done: tests plus visible on a recording.
 11. **Search and filters.** Done: callsign and flight-number search with honest not-seen states.
 12. **Archive incident.** `scripts/import-globe-history.ts` for one incident, with `reportedCause` and source. Done: replays with "Later reported as" panel.
-13. **Deploy.** Vercel, Railway, R2 CORS. Done: public URL works signed-out on a phone.
+13. **Deploy.** Vercel, Railway. Done: public URL works signed-out on a phone.
 14. **P2** only after all of the above.
 
 ## 15. Test plan (`packages/detectors/test`)
@@ -844,11 +850,6 @@ ADSB_API_KEY=                 # optional, not required as of 2026-10-17
 POLL_INTERVAL_MS=10000
 CORS_ORIGIN=https://aerotrack.vercel.app
 ADMIN_TOKEN=change-me
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET=aerotrack
-R2_PUBLIC_BASE_URL=https://<public-r2-domain>
 OPENSKY_CLIENT_ID=            # Australia-wide overview (5.8); overview disabled if unset
 OPENSKY_CLIENT_SECRET=
 ANTHROPIC_API_KEY=            # P2 only
@@ -857,9 +858,7 @@ ANTHROPIC_API_KEY=            # P2 only
 `apps/web`:
 ```
 NEXT_PUBLIC_API_URL=https://<railway-domain>
-NEXT_PUBLIC_RECORDINGS_BASE_URL=https://<public-r2-domain>/recordings
 NEXT_PUBLIC_MAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty
-NEXT_PUBLIC_PMTILES_URL=https://<public-r2-domain>/sydney.pmtiles
 NEXT_PUBLIC_OFFLINE=0
 ```
 
@@ -877,20 +876,6 @@ NEXT_PUBLIC_OFFLINE=0
 - Watch paths: `apps/api/**`, `packages/**`.
 - Single instance (the poller must not run twice).
 
-**Cloudflare R2**
-- Bucket `aerotrack`, public access via r2.dev or custom domain.
-- CORS policy (required for PMTiles range requests and recordings fetches):
-```json
-[
-  {
-    "AllowedOrigins": ["https://aerotrack.vercel.app", "http://localhost:3000"],
-    "AllowedMethods": ["GET", "HEAD"],
-    "AllowedHeaders": ["Range", "If-Match", "If-None-Match"],
-    "ExposeHeaders": ["ETag", "Content-Length", "Content-Range", "Accept-Ranges"],
-    "MaxAgeSeconds": 3600
-  }
-]
-```
 
 ## 19. Attribution and compliance
 

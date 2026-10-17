@@ -1,0 +1,778 @@
+# AeroTrack Technical Specification
+
+Version 1.0 · Based on PRD v1.1 · Name may change (alias: FlightSense)
+
+Tagline: Understand the journey, not just the destination.
+Principle: AeroTrack is never more confident than its data.
+
+---
+
+## 1. Product summary
+
+A responsive web flight tracker for Sydney that explains observable aircraft behaviour in plain English: climbing, descending, turning, circling, rapid descent, lost signal, data glitches and track gaps. It separates facts from possible interpretations and never infers causes.
+
+Users:
+- Primary: travellers and friends/family following a flight. Want reassurance and plain language.
+- Secondary: casual aviation enthusiasts.
+- Out of scope: pilots, ATC, airline ops, any safety-critical use.
+
+## 2. Scope
+
+### P0 (must)
+- Responsive shell, desktop side panel, simple mobile panel
+- MapLibre map (OpenFreeMap online, PMTiles offline)
+- Aircraft markers, selection, details panel (available fields only)
+- Backend poller for adsb.lol, shared by all clients
+- Live/recorded mode toggle and badge
+- Recorded flight replay, working fully offline
+- Detectors: sustained climb, sustained descent, sustained turn, signal lost, glitch handling, gap handling
+- Detector test suite
+
+### P1 (should)
+- Possible circling
+- Rapid descent
+- Emergency code
+- Event timeline per aircraft
+- Callsign search, plus flight number to callsign via airline prefix (QF1 to QFA1)
+- Airline and aircraft-type filters
+- Loading, error and empty states
+- One recorded past incident from the ADSB.lol globe_history archive
+
+### P2 (if time)
+- LLM phrasing layer (input: detector output only)
+- Natural-language search (LLM parses to structured filters)
+- Visual polish
+
+### Cut (do not build)
+- Metadata-only flight preview, ADSBdb integration
+- Route lines, domestic/international filter. If routes ever appear, label "typical route for this callsign"
+- Mixed live/sample view, aircraft photos, airport search, filter persistence, polished bottom sheet
+- Accounts (open question, see section 16)
+
+## 3. Architecture
+
+```
+adsb.lol ──(poll 5-10 s, server only)──► apps/api (Railway)
+                                           │
+                     adapter + Zod ────────┤
+                                           ▼
+                           in-memory ring buffer per aircraft (15 min)
+                                           │
+                       packages/detectors ─┤ (open/update/close events)
+                                           │
+              batched writes ─► Postgres (positions 24 h, events, recordings)
+                                           │
+                                SSE stream ─► apps/web (Vercel) ─► MapLibre
+
+Recorded mode (online or offline):
+  recording JSON (R2 or /public) ─► apps/web replay engine
+                                     └► packages/detectors IN THE BROWSER
+```
+
+Key decisions:
+- Detectors are shared TS so the same rules run on live data (server) and on replays (browser). This is what makes offline replay possible.
+- SSE comes from Railway, not Vercel. Vercel functions are short-lived and unsuited to long-lived connections.
+- Detectors read the in-memory buffer. Postgres is for persistence, restarts and recordings.
+- Single api instance. No Redis needed at this stage.
+
+## 4. Repository layout
+
+```
+aerotrack/
+  CLAUDE.md
+  docs/SPEC.md
+  package.json            # workspace root, scripts
+  pnpm-workspace.yaml
+  tsconfig.base.json
+  apps/
+    web/
+      app/
+        page.tsx                 # live map
+        recorded/[id]/page.tsx   # recorded replay
+        layout.tsx
+      components/
+        map/AircraftMap.tsx
+        map/aircraftLayer.ts
+        map/trackLayer.ts
+        panel/DetailsPanel.tsx
+        panel/EventCard.tsx
+        panel/Timeline.tsx
+        ModeBadge.tsx
+        SearchBar.tsx
+        Filters.tsx
+        StatusBanner.tsx
+      lib/
+        sse.ts                   # EventSource client + reconnect
+        interpolate.ts           # dead reckoning between updates
+        replay/engine.ts         # client-side replay
+        mapStyle.ts              # online vs offline style
+      store/aircraftStore.ts     # Zustand
+      public/
+        offline/sydney.pmtiles   # offline only, gitignored if large
+        offline/fonts/...
+        offline/sprites/...
+        recordings/*.json
+    api/
+      src/
+        index.ts                 # Fastify bootstrap
+        env.ts                   # Zod-validated env
+        providers/adsblol/client.ts
+        providers/adsblol/schema.ts
+        providers/adsblol/adapter.ts
+        poller.ts
+        buffer.ts                # ring buffer per hex
+        eventEngine.ts           # runs detectors, manages lifecycle
+        writer.ts                # batched DB writes
+        sse.ts                   # client registry + broadcast
+        routes/*.ts
+        db/schema.ts             # Drizzle
+        db/client.ts
+        jobs/retention.ts
+      drizzle/                   # migrations
+  packages/
+    shared/
+      src/types.ts
+      src/schemas.ts
+      src/config/thresholds.ts
+      src/airlines.ts            # IATA to ICAO prefix map
+    detectors/
+      src/preprocess.ts
+      src/climbDescent.ts
+      src/turn.ts
+      src/circling.ts
+      src/rapidDescent.ts
+      src/signalLost.ts
+      src/emergency.ts
+      src/glitch.ts
+      src/gaps.ts
+      src/explain.ts             # templates
+      src/index.ts               # runAll(track, ctx) -> Detection[]
+      test/fixtures/*.ts
+      test/*.test.ts
+  scripts/
+    export-recording.ts          # Postgres window -> recording JSON
+    import-globe-history.ts      # archive trace -> recording JSON
+    build-airlines.ts            # OpenFlights -> airlines.ts
+```
+
+## 5. External APIs and data sources
+
+### 5.1 ADSB.lol live API (primary, P0)
+
+- Base URL: `https://api.adsb.lol`
+- Interactive docs: `https://api.adsb.lol/docs` (VERIFY current endpoints there first)
+- Auth: none currently. VERIFY whether an API key is now required.
+- REQUIRED: send a `User-Agent` header on every request. Requests without one get 403. Node's fetch does not set one by default.
+  - `User-Agent: AeroTrack/0.1 (+contact email)`
+
+Endpoints (v2):
+
+| Purpose | Endpoint |
+|---|---|
+| Aircraft near a point (radius in nautical miles, max 250) | `GET /v2/point/{lat}/{lon}/{radius}` |
+| Same, alternate form | `GET /v2/lat/{lat}/lon/{lon}/dist/{radius}` |
+| By ICAO hex | `GET /v2/hex/{hex}` |
+| By callsign | `GET /v2/callsign/{callsign}` |
+| By registration | `GET /v2/reg/{reg}` |
+| By type designator | `GET /v2/type/{type}` |
+| By squawk | `GET /v2/squawk/{squawk}` |
+
+Our poll: `GET /v2/point/-33.9/151.0/60` every 5 to 10 s (configurable). One request serves all clients.
+
+Response envelope (VERIFY):
+```json
+{ "ac": [ ... ], "msg": "No error", "now": 1760684400123, "total": 142, "ctime": 1760684400100, "ptime": 3 }
+```
+- `now` is epoch milliseconds.
+
+Aircraft object fields we use (readsb format, all optional, VERIFY):
+
+| Field | Type | Meaning | Notes |
+|---|---|---|---|
+| `hex` | string | ICAO 24-bit address | Primary key. May start with `~` for non-ICAO (TIS-B). Keep as-is |
+| `flight` | string | Callsign | Space-padded. `trim()` it |
+| `r` | string | Registration | |
+| `t` | string | ICAO type designator, e.g. B738 | |
+| `desc` | string | Long type name | Not always present |
+| `category` | string | Emitter category A0-A7, B*, C* | A7 = rotorcraft |
+| `alt_baro` | number or `"ground"` | Barometric altitude, ft | `"ground"` means on ground |
+| `alt_geom` | number | Geometric altitude, ft | |
+| `gs` | number | Ground speed, kt | |
+| `track` | number | True track over ground, degrees | Use for turns |
+| `baro_rate` | number | Vertical rate, ft/min | Prefer over geom_rate |
+| `geom_rate` | number | Geometric vertical rate | Fallback |
+| `squawk` | string | Transponder code | String, keep leading zeros |
+| `emergency` | string | `none`, `general`, `lifeguard`, `minfuel`, `nordo`, `unlawful`, `downed`, `reserved` | |
+| `lat`, `lon` | number | Position | May be absent |
+| `seen_pos` | number | Seconds since last position update | |
+| `seen` | number | Seconds since any message | |
+| `mlat`, `tisb` | string[] | Fields derived via MLAT/TIS-B | Optional display |
+| `dst`, `dir` | number | Distance and bearing from query point | Point queries only |
+
+Position timestamp: `posTs = now/1000 - seen_pos` (seconds). Always store this, not receipt time.
+
+Aircraft disappear from the response once stale. The server must track `lastPosTs` per hex itself to detect signal loss.
+
+Optional route lookup (cut from MVP, documented for later, VERIFY):
+- `POST https://api.adsb.lol/api/0/routeset`
+- Body: `{ "planes": [ { "callsign": "QFA1", "lat": -33.9, "lng": 151.1 } ] }`
+- Returns plausible origin/destination airports. Static and often stale. If used, label "typical route for this callsign".
+
+### 5.2 ADSB.lol globe_history archive (P1, recorded incident)
+
+- Published as GitHub releases under the `adsblol` organisation, repos named like `globe_history_2025`, `globe_history_2026` (VERIFY exact repo).
+- Licence: ODbL. Attribute "Data: ADSB.lol (ODbL)".
+- Daily archives are large and split into parts. Never fetch from the app. Use `scripts/import-globe-history.ts` once, offline.
+- Inside: `traces/<last 2 hex chars>/trace_full_<hex>.json` (VERIFY path).
+- Trace format (readsb, VERIFY):
+```json
+{
+  "icao": "7c6b2d",
+  "timestamp": 1760600000.0,
+  "trace": [
+    [0.0, -33.94, 151.17, 3500, 210.5, 165.2, 0, -800, { "flight": "QFA432 ", "t": "B738" }, "adsb_icao", 3600, -768, null, null]
+  ]
+}
+```
+  - index 0: seconds offset from `timestamp`
+  - 1-2: lat, lon
+  - 3: altitude ft or `"ground"`
+  - 4: ground speed kt
+  - 5: track deg
+  - 6: flags bitfield
+  - 7: vertical rate fpm
+  - 8: aircraft details object or null
+  - later indexes: source, geom alt, geom rate, ias, roll (VERIFY)
+- Script output: recording JSON (section 8).
+
+### 5.3 Map tiles
+
+Online (P0): OpenFreeMap
+- Style URL: `https://tiles.openfreemap.org/styles/liberty`
+- Other styles: see openfreemap.org (pick a dark one if available for the aviation palette)
+- No key, no registration. Donation-funded, no uptime guarantee.
+- Attribution: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors.
+
+Offline (P0): Protomaps PMTiles
+- npm: `pmtiles`, `@protomaps/basemaps`
+- Extract Sydney once with the pmtiles CLI (VERIFY current build URL at docs.protomaps.com):
+```
+  pmtiles extract https://build.protomaps.com/<YYYYMMDD>.pmtiles sydney.pmtiles --bbox=150.5,-34.3,151.6,-33.4 --maxzoom=13
+```
+- Register the protocol in MapLibre:
+```ts
+  import { Protocol } from "pmtiles";
+  const protocol = new Protocol();
+  maplibregl.addProtocol("pmtiles", protocol.tile);
+```
+- Build the style with `@protomaps/basemaps` layers and source `pmtiles:///offline/sydney.pmtiles` (offline) or the R2 URL (online backup).
+- Offline also needs glyphs (fonts) and sprites served locally from `/public/offline/`. Download them from the Protomaps basemaps assets repo. Without this, labels and icons fail offline.
+- Attribution: Protomaps, © OpenStreetMap contributors.
+
+### 5.4 Airline prefix mapping (P1)
+
+- Source: OpenFlights `airlines.dat` (ODbL): `https://raw.githubusercontent.com/jpatokal/openflights/master/data/airlines.dat`
+- `scripts/build-airlines.ts` generates `packages/shared/src/airlines.ts`: `{ iata: "QF", icao: "QFA", name: "Qantas" }[]`. Keep only active airlines with both codes.
+- Flight number search: `QF1` → `QFA1`. Label results "Matched by airline prefix". Some airlines use callsign numbers that differ from flight numbers, so a miss must say "No live aircraft found for this flight number. The callsign may differ."
+
+### 5.5 Airports (optional, for context and later go-around)
+
+- OurAirports CSV: `https://davidmegginson.github.io/ourairports-data/airports.csv`
+- Keep a Sydney-region subset (YSSY, YSBK, YSCN, YSWS and similar) in `packages/shared`.
+
+### 5.6 LLM phrasing (P2)
+
+- Server only, from `apps/api`. Never the browser.
+- Anthropic Messages API: `POST https://api.anthropic.com/v1/messages`, headers `x-api-key`, `anthropic-version: 2023-06-01`, `content-type: application/json`.
+- Suggested model: `claude-haiku-5-5` (fast, cheap) for phrasing.
+- Input: the event JSON and template text only. Never raw tracks.
+- System prompt must require: keep the three parts, use only provided facts, never state causes, same length or shorter.
+- Cache per event id. On failure, keep the template text.
+
+## 6. Shared types (`packages/shared/src/types.ts`)
+
+```ts
+export type DataMode = "live" | "recorded" | "fixture";
+
+export interface Observation {
+  t: number;            // epoch seconds, position time
+  lat: number;
+  lon: number;
+  altFt: number | null; // null when unknown
+  onGround: boolean;
+  gsKt: number | null;
+  trackDeg: number | null;
+  baroRateFpm: number | null;
+}
+
+export interface AircraftState {
+  hex: string;
+  callsign: string | null;
+  registration: string | null;
+  typeCode: string | null;
+  typeDesc: string | null;
+  category: string | null;
+  squawk: string | null;
+  emergency: string | null;
+  last: Observation;
+  lastPosTs: number;
+  mode: DataMode;
+}
+
+export type EventType =
+  | "climb" | "descent" | "turn" | "circling"
+  | "rapid_descent" | "signal_lost" | "glitch" | "gap" | "emergency";
+
+export type Confidence = "observed" | "possible" | "fact";
+
+export interface Explanation {
+  seen: string;        // what we see
+  commonly?: string;   // what this commonly means (optional for some types)
+  cannotTell: string;  // what the data can't confirm
+}
+
+export interface Detection {
+  type: EventType;
+  confidence: Confidence;
+  windowStart: number;
+  windowEnd: number;
+  evidence: Record<string, number | string | boolean>;
+}
+
+export interface BehaviourEvent extends Detection {
+  id: string;
+  hex: string;
+  mode: DataMode;
+  status: "open" | "closed";
+  explanation: Explanation;
+  explanationSource: "template" | "llm";
+  openedAt: number;
+  updatedAt: number;
+  closedAt: number | null;
+}
+```
+
+## 7. Thresholds (`packages/shared/src/config/thresholds.ts`)
+
+All starting values. Tune on recorded data.
+
+```ts
+export const THRESHOLDS = {
+  poll: { intervalMs: 7000, radiusNm: 60, centre: { lat: -33.9, lon: 151.0 } },
+  buffer: { keepSec: 900 },
+  hygiene: {
+    maxImpliedGsKt: 1000,       // drop position jumps faster than this
+    minPoints: 4,
+    minSpanSec: 60,
+  },
+  climbDescent: {
+    minNetFt: 1000,
+    minSpanSec: 60,
+    minObs: 4,
+    monotonicShare: 0.7,        // share of steps in the same direction
+    baroRateFpm: 500,           // alternative trigger: sustained |baro_rate|
+  },
+  turn: {
+    windowSec: 90,
+    minCumulativeDeg: 30,
+    ignoreStepBelowDeg: 5,
+  },
+  circling: {
+    windowSec: 360,
+    minCumulativeDeg: 300,
+    sameDirectionShare: 0.8,
+  },
+  rapidDescent: {
+    minRateFpm: 5000,
+    minConsecutiveObs: 3,
+    minSpanSec: 30,
+  },
+  glitch: {
+    spikeRateFpm: 20000,
+    revertWithinSamples: 2,
+    revertToleranceFt: 300,
+  },
+  gap: { thresholdSec: 60 },
+  signalLost: { afterSec: 60 },
+  lifecycle: { closeAfterSec: 60, reopenCooldownSec: 120 },
+} as const;
+```
+
+## 8. Recording file format
+
+Used for live captures, archive imports and test fixtures. Served from R2 online and `/public/recordings` offline.
+
+```json
+{
+  "id": "2026-10-17-ssy-circling-qfa432",
+  "title": "Circling before landing, Sydney",
+  "mode": "recorded",
+  "source": "ADSB.lol live capture",
+  "attribution": "Data: ADSB.lol (ODbL)",
+  "capturedFrom": 1760684400,
+  "capturedTo": 1760685300,
+  "bbox": [150.5, -34.3, 151.6, -33.4],
+  "reportedCause": null,
+  "aircraft": [
+    {
+      "hex": "7c6b2d",
+      "callsign": "QFA432",
+      "registration": "VH-VXA",
+      "typeCode": "B738",
+      "category": "A3",
+      "points": [
+        [1760684400, -33.71, 151.32, 7000, 230, 182.0, -64]
+      ]
+    }
+  ]
+}
+```
+- `points` tuple: `[t, lat, lon, altFt|null, gsKt|null, trackDeg|null, baroRateFpm|null]`
+- `reportedCause` (optional): `{ "text": "...", "sourceUrl": "...", "sourceName": "..." }`. Shown separately as "Later reported as ... [source]". Never mixed into detector output.
+- Fixture files use `"mode": "fixture"` and fake callsigns like `TEST01`.
+
+## 9. Detectors (`packages/detectors`)
+
+All detectors are pure: `(track: Observation[], ctx: DetectContext) => Detection | null`. No I/O, no Date.now() inside. `ctx.now` is passed in, so replays and tests are deterministic.
+
+```ts
+export interface DetectContext {
+  now: number;               // epoch seconds (replay clock in recorded mode)
+  lastPosTs: number;
+  squawk: string | null;
+  emergency: string | null;
+  thresholds: typeof THRESHOLDS;
+}
+export function runAll(track: Observation[], ctx: DetectContext): Detection[];
+```
+
+### 9.1 Preprocessing (runs first, always)
+1. Sort by `t`. Drop exact duplicate `t` (keep last).
+2. Drop points with missing lat/lon.
+3. `alt_baro === "ground"` → `altFt = 0`, `onGround = true`.
+4. Drop position jumps where implied ground speed between consecutive points exceeds `maxImpliedGsKt`.
+5. Glitch pass (see 9.7): mark and exclude spike points, emit `glitch` detection.
+6. Gap pass (see 9.8): split into segments where `dt > gap.thresholdSec`. Behaviour detectors use ONLY the latest segment.
+7. If the latest segment has fewer than `minPoints` or spans less than `minSpanSec`, return status `insufficient_history` and run no behaviour detectors.
+
+Heading maths: always use the signed shortest difference.
+```ts
+export const dHeading = (a: number, b: number) => ((b - a + 540) % 360) - 180; // -180..180
+```
+
+### 9.2 Sustained climb / descent (P0)
+- Window: latest segment, at least `minSpanSec` and `minObs` points.
+- Trigger A: `|alt_last - alt_first| >= minNetFt` AND at least `monotonicShare` of steps move in that direction.
+- Trigger B: the last `minObs` points all have `|baroRateFpm| > baroRateFpm` with the same sign, spanning `minSpanSec`.
+- Ignore on-ground points.
+- Evidence: `startAltFt`, `endAltFt`, `netFt`, `spanSec`, `avgRateFpm`, `obs`.
+- Confidence: `observed`.
+
+### 9.3 Sustained turn (P0)
+- Window: last `turn.windowSec`.
+- Sum signed `dHeading` between consecutive tracks, skipping steps with `|d| < ignoreStepBelowDeg`.
+- Trigger: `|sum| >= minCumulativeDeg`.
+- Evidence: `totalDeg`, `direction` (`left` if negative, `right` if positive), `spanSec`.
+- Confidence: `observed`.
+
+### 9.4 Possible circling (P1)
+- Window: last `circling.windowSec`.
+- Sum signed `dHeading` (all steps).
+- Trigger: `|sum| >= minCumulativeDeg` AND at least `sameDirectionShare` of steps share the sign.
+- Evidence: `totalDeg`, `laps` (floor of |sum| / 360), `spanSec`, `altSpreadFt`, `direction`.
+- Confidence: `possible`.
+- When circling is open, suppress separate `turn` events for the same window.
+
+### 9.5 Rapid descent (P1)
+- Trigger: at least `minConsecutiveObs` consecutive points with `baroRateFpm <= -minRateFpm` (or derived rate if baro_rate missing), spanning `minSpanSec`.
+- Must not overlap a glitch-marked point.
+- Evidence: `peakRateFpm`, `avgRateFpm`, `spanSec`, `startAltFt`, `endAltFt`.
+- Confidence: `observed`.
+
+### 9.6 Signal lost / stale (P0)
+- Trigger: `ctx.now - ctx.lastPosTs > signalLost.afterSec`.
+- Evidence: `secondsSinceLastPosition`, `lastAltFt`, `lastLat`, `lastLon`.
+- Confidence: `fact`.
+- Closes automatically when a fresh position arrives.
+
+### 9.7 Data glitch (P0)
+- For each point i: implied rate from i-1 to i exceeds `spikeRateFpm`, and within `revertWithinSamples` the altitude returns within `revertToleranceFt` of point i-1.
+- Mark point i as glitch, exclude it from other detectors, emit one `glitch` detection.
+- Evidence: `glitchAltFt`, `expectedAltFt`, `impliedRateFpm`, `at`.
+- Confidence: `fact`.
+
+### 9.8 Gap in track (P0)
+- Any consecutive pair with `dt > gap.thresholdSec`.
+- Evidence: `gapStart`, `gapEnd`, `gapSec`.
+- Confidence: `fact`.
+- The map must NOT draw a line across a gap (MultiLineString, one line per segment).
+
+### 9.9 Emergency code (P1)
+- Trigger: `squawk === "7700"` OR `emergency` present and not `"none"`.
+- Evidence: `squawk`, `emergency`.
+- Confidence: `fact`.
+- Never interpreted. Never sent to the LLM.
+
+### 9.10 Event lifecycle (`apps/api/src/eventEngine.ts`, and mirrored in the replay engine)
+- Key: `(hex, type)`. At most one open event per key.
+- Detection present and no open event, and cooldown passed → open event.
+- Detection present and open event → update evidence and `windowEnd`.
+- No detection for `closeAfterSec` → close event.
+- Do not reopen the same key within `reopenCooldownSec`.
+- Never emit an event per poll.
+
+## 10. Explanation templates (`packages/detectors/src/explain.ts`)
+
+Each returns `{ seen, commonly?, cannotTell }`. Fill only from evidence. Round numbers for humans (altitudes to nearest 100 ft, rates to nearest 100 fpm, times to nearest minute or 10 s).
+
+| Type | seen | commonly | cannotTell |
+|---|---|---|---|
+| climb | "This aircraft has climbed {netFt} ft in the last {span}." | "Aircraft climb after take-off and when moving to a new cruising level." | "The data doesn't show why it is climbing." |
+| descent | "This aircraft has descended {netFt} ft in the last {span}." | "This often happens on approach to land." | "The data doesn't confirm why or where it will land." |
+| turn | "This aircraft has turned {totalDeg}° to the {direction} in the last {span}." | "Turns are often part of a planned route or an adjustment in flight." | "The data doesn't show the reason for the turn." |
+| circling | "This aircraft has turned through {totalDeg}° in {span}, staying within {altSpreadFt} ft of the same altitude." | "Aircraft sometimes fly circular patterns while waiting." | "The data alone can't confirm that it is waiting, or why." |
+| rapid_descent | "This aircraft is descending unusually quickly, about {peakRateFpm} ft per minute." | (none) | "This can happen for several reasons, and the data doesn't show which." |
+| signal_lost | "No new position for {secondsSinceLastPosition}." | "This is usually a gap in receiver coverage, which is common over the ocean." | "It doesn't mean anything happened to the aircraft." |
+| glitch | "One altitude reading was inconsistent and has been ignored." | "Single bad readings are a normal part of radio data." | "It doesn't reflect a real change in altitude." |
+| gap | "No data between {gapStart} and {gapEnd}." | (none) | "The line shows a gap, not the actual path." |
+| emergency | "This aircraft is transmitting an emergency code." | (none) | "The code alone doesn't tell us the reason." |
+
+Card labels: "What we see", "What this commonly means", "What we can't tell". Plus a "How we know" expander listing evidence in plain words.
+
+## 11. Backend (`apps/api`)
+
+### 11.1 Poller
+- `setInterval` with drift guard; never overlap requests (skip tick if previous in flight).
+- Timeout 5 s via AbortController.
+- On failure: exponential backoff up to 60 s, set `feedStatus = "down"`, broadcast status. Keep last known states.
+- On success: parse with Zod (passthrough unknown fields, never crash on extra fields), adapt to `AircraftState`, push observations into the buffer.
+
+### 11.2 Ring buffer
+- `Map<hex, Observation[]>`, trim to `buffer.keepSec`.
+- Ignore observations whose `t` is not newer than the last stored `t` for that hex.
+- On startup, hydrate the last 15 min from Postgres so detectors have history immediately.
+
+### 11.3 Event engine
+- After each poll, for every hex in the buffer (including ones missing from this poll, for signal loss): `runAll(track, ctx)`, then apply lifecycle, then build explanation, then persist and broadcast changes.
+- Drop aircraft from the buffer 15 min after last position.
+
+### 11.4 Writer
+- Batch insert positions every 5 s or 500 rows, whichever first.
+- Events upserted on change.
+
+### 11.5 Retention job
+- Every 30 min: delete live positions older than 24 h. Never delete positions referenced by a saved recording window (recordings are exported to JSON anyway).
+
+### 11.6 Database schema (Drizzle, Postgres)
+
+```ts
+aircraft: hex (pk text), callsign, registration, type_code, type_desc, category, last_seen_at (timestamptz)
+positions: id (bigserial pk), hex, t (timestamptz), lat, lon, alt_ft (int null), on_ground (bool),
+           gs_kt (real null), track_deg (real null), baro_rate_fpm (int null), squawk (text null), mode (text)
+           index (hex, t), index (t)
+events: id (uuid pk), hex, type, confidence, status, mode, window_start, window_end,
+        evidence (jsonb), explanation (jsonb), explanation_source, opened_at, updated_at, closed_at
+        index (hex, opened_at), index (status)
+recordings: id (text pk), title, source, attribution, captured_from, captured_to, file_url, reported_cause (jsonb null), created_at
+```
+
+### 11.7 HTTP API
+
+| Method | Path | Returns |
+|---|---|---|
+| GET | `/health` | `{ ok, feedStatus, lastPollAt, aircraftCount }` |
+| GET | `/api/aircraft` | Current snapshot: `AircraftState[]` |
+| GET | `/api/aircraft/:hex` | `{ state, openEvents, recentEvents }` |
+| GET | `/api/aircraft/:hex/track?minutes=15` | `Observation[]` segmented: `{ segments: Observation[][] }` |
+| GET | `/api/events?hex=&status=&since=` | `BehaviourEvent[]` |
+| GET | `/api/search?q=` | Matches by callsign, registration, type, or flight number via prefix. Each with `freshness`: `live`, `last_seen_<n>m`, `not_seen` |
+| GET | `/api/recordings` | List of recordings metadata |
+| POST | `/api/recordings` | Admin only (header `x-admin-token`). Body `{ title, from, to, hexes? }`. Exports window to JSON, uploads to R2 |
+| GET | `/api/stream` | SSE |
+
+### 11.8 SSE contract (`/api/stream`)
+
+Headers: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`. Heartbeat comment every 15 s. CORS limited to `CORS_ORIGIN`.
+
+Events:
+```
+event: snapshot      data: { now, feedStatus, aircraft: CompactAircraft[] }   // on connect and every poll
+event: event_open    data: BehaviourEvent
+event: event_update  data: BehaviourEvent
+event: event_close   data: { id, hex, closedAt }
+event: status        data: { feedStatus: "ok" | "degraded" | "down", lastPollAt }
+```
+`CompactAircraft` = `[hex, callsign, lat, lon, altFt, gsKt, trackDeg, baroRateFpm, typeCode, category, lastPosTs, hasOpenEvent]` to keep payloads small.
+
+## 12. Frontend (`apps/web`)
+
+### 12.1 Modes
+- Zustand store holds `mode: "live" | "recorded"`.
+- Live: connect SSE, render server state and server events.
+- Recorded: disconnect SSE, load recording JSON, run the replay engine. No live record ever appears.
+- Switching mode clears the map and store.
+
+### 12.2 Mode badge (always visible)
+- Live: "Live · updated {n}s ago". Turns amber if stale over 30 s.
+- Live feed down: "Live feed unavailable · showing last known positions" plus a button "Watch a recorded flight".
+- Recorded: "Recorded flight · {date, time} · {speed}x · Data: ADSB.lol (ODbL)".
+- Fixture (only if ever demoed): "Synthetic test case · not a real aircraft".
+
+### 12.3 Map
+- One GeoJSON source for all aircraft, one symbol layer. No HTML markers.
+- `icon-rotate` bound to `trackDeg`, `icon-rotation-alignment: map`.
+- Icon class from category/type (narrowbody, widebody, turboprop, light, helicopter, unknown). Original SVGs only.
+- Colour by altitude band.
+- Small badge on aircraft with an open event.
+- Selected aircraft: track layer from `/api/aircraft/:hex/track`, drawn as MultiLineString so gaps show as gaps.
+- Interpolation: between updates, dead-reckon from last fix using `gsKt` and `trackDeg`, capped at 15 s, snap on new data. `requestAnimationFrame`, update source at most 10 times per second.
+- Attribution control always on.
+
+### 12.4 Details panel
+- Identity: callsign, registration, type (code + description).
+- Now: altitude, speed, heading, vertical rate, last position time ("12 s ago").
+- Insights: most recent open event card, then timeline (P1).
+- Any missing field: "Not available from this source".
+- Insufficient history: "Insights appear after about a minute of observations."
+
+### 12.5 Replay engine (`lib/replay/engine.ts`)
+- Input: recording JSON, speed (1x, 10x, 20x), start offset.
+- Replay clock drives `ctx.now`.
+- Each tick: emit points with `t <= clock`, update per-hex tracks, run `runAll` from `packages/detectors`, apply the same lifecycle rules, render.
+- Controls: play, pause, speed, scrub.
+- Must work with no network.
+
+### 12.6 Search and filters (P1)
+- Search input accepts callsign, registration, type, or flight number.
+- Flight number → callsign via `airlines.ts` prefix map, labelled "Matched by airline prefix".
+- `not_seen` result text: "We can't see this aircraft right now. That doesn't mean the flight isn't operating."
+- Filters: airline (from callsign prefix), aircraft type class. Clear-all button. Not persisted.
+
+### 12.7 Design
+- Dark aviation palette: navy `#101B2E`, sky `#51B9FF`, teal `#23C9A9`, amber `#F5B85B`, text `#E9F1F9`.
+- Amber reserved for `possible` events, stale data and warnings.
+- Desktop: map plus right side panel. Mobile: map plus simple bottom panel.
+- WCAG AA contrast.
+
+## 13. Offline demo mode
+
+- Env flag `NEXT_PUBLIC_OFFLINE=1` switches the map style to local PMTiles, local fonts and sprites, and disables SSE.
+- Run locally on the demo laptop: `pnpm --filter web build && pnpm --filter web start`.
+- Recordings in `public/recordings`.
+- Test with wifi physically off before the demo.
+
+## 14. Build phases for Claude Code
+
+Do these in order. Each ends with its done-criteria passing.
+
+1. **Scaffold.** pnpm workspace, tsconfig base, apps and packages, lint, Vitest. Done: `pnpm typecheck && pnpm test` pass on empty packages.
+2. **Shared + detectors core.** Types, thresholds, `dHeading`, preprocessing, gap, glitch, climb/descent, turn, signal lost, explain templates. Fixtures and tests (see 15). Done: all tests green.
+3. **Provider adapter.** adsb.lol client with User-Agent, Zod schema, adapter, one real fetch logged. Done: adapter test passes on a saved real response.
+4. **API core.** Fastify, env validation, Drizzle schema and migration, poller, buffer, writer, event engine, `/health`, `/api/aircraft`, `/api/aircraft/:hex`, `/api/aircraft/:hex/track`. Done: positions accumulate; restart hydrates buffer.
+5. **SSE.** `/api/stream` with snapshot, event and status messages. Done: curl shows live snapshots.
+6. **Web map.** Live map, aircraft layer, interpolation, mode badge, attribution. Done: planes move smoothly over Sydney from local api.
+7. **Details panel + event cards.** Done: selecting an aircraft shows fields and live events with three-part cards and evidence.
+8. **Recordings.** `scripts/export-recording.ts`, `/api/recordings`, R2 upload, replay engine in web, recorded route. Done: a recorded track replays and fires detectors in the browser.
+9. **Offline.** PMTiles extract, local fonts/sprites, offline flag. Done: full replay works with wifi off.
+10. **P1 detectors.** Circling, rapid descent, emergency, timeline. Done: tests plus visible on a recording.
+11. **Search and filters.** Done: callsign and flight-number search with honest not-seen states.
+12. **Archive incident.** `scripts/import-globe-history.ts` for one incident, with `reportedCause` and source. Done: replays with "Later reported as" panel.
+13. **Deploy.** Vercel, Railway, R2 CORS. Done: public URL works signed-out on a phone.
+14. **P2** only after all of the above.
+
+## 15. Test plan (`packages/detectors/test`)
+
+Required fixtures and expectations:
+- Steady level cruise → no events.
+- Clean climb 3,000 ft over 3 min → `climb`.
+- Small altitude wobble ±200 ft → no climb/descent.
+- Heading 350° → 10° → 30° → `turn`, total 40°, not 320°.
+- Duplicates and out-of-order timestamps → same result as clean input.
+- Single altitude spike of +8,000 ft that reverts next sample → `glitch`, no climb, no rapid descent.
+- 3-minute gap mid-track → `gap`; detectors use only the latest segment.
+- Only 2 points → insufficient history, no behaviour events.
+- 400° cumulative turn at steady altitude in 5 min → `circling` with laps 1, no separate `turn`.
+- Sustained -6,000 fpm for 40 s → `rapid_descent`.
+- `now - lastPosTs = 180` → `signal_lost` with 3 min.
+- Squawk 7700 → `emergency`.
+- Lifecycle: same climb across 10 polls → one event opened, updated, closed once.
+
+## 16. Open questions
+
+- Final product name: AeroTrack or FlightSense.
+- Accounts and watchlist: currently cut. Adding Better Auth or Auth.js with a watchlist table is roughly a half-day if needed.
+- Poll interval: 5 or 10 s, depending on adsb.lol limits (VERIFY).
+- Whether to show "typical route" from the adsb.lol routeset API.
+
+## 17. Environment variables
+
+`apps/api`:
+```
+DATABASE_URL=postgres://...
+PORT=8080
+ADSB_BASE_URL=https://api.adsb.lol
+ADSB_USER_AGENT=AeroTrack/0.1 (+you@example.com)
+POLL_INTERVAL_MS=7000
+CORS_ORIGIN=https://aerotrack.vercel.app
+ADMIN_TOKEN=change-me
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=aerotrack
+R2_PUBLIC_BASE_URL=https://<public-r2-domain>
+ANTHROPIC_API_KEY=            # P2 only
+```
+
+`apps/web`:
+```
+NEXT_PUBLIC_API_URL=https://<railway-domain>
+NEXT_PUBLIC_RECORDINGS_BASE_URL=https://<public-r2-domain>/recordings
+NEXT_PUBLIC_MAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty
+NEXT_PUBLIC_PMTILES_URL=https://<public-r2-domain>/sydney.pmtiles
+NEXT_PUBLIC_OFFLINE=0
+```
+
+## 18. Deployment
+
+**Vercel (web)**
+- Import repo, root directory `apps/web`, framework Next.js.
+- Install command `pnpm install`, build `pnpm --filter web build` (or let Vercel detect the workspace).
+- Set web env vars.
+
+**Railway (api + Postgres)**
+- New service from repo, root `apps/api`, start `pnpm --filter api start`.
+- Add the Postgres plugin; `DATABASE_URL` is injected.
+- Run migrations on deploy (`pnpm --filter api db:migrate` as a pre-start step).
+- Watch paths: `apps/api/**`, `packages/**`.
+- Single instance (the poller must not run twice).
+
+**Cloudflare R2**
+- Bucket `aerotrack`, public access via r2.dev or custom domain.
+- CORS policy (required for PMTiles range requests and recordings fetches):
+```json
+[
+  {
+    "AllowedOrigins": ["https://aerotrack.vercel.app", "http://localhost:3000"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["Range", "If-Match", "If-None-Match"],
+    "ExposeHeaders": ["ETag", "Content-Length", "Content-Range", "Accept-Ranges"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+## 19. Attribution and compliance
+
+- Map footer: "Data: ADSB.lol (ODbL) · © OpenStreetMap contributors · OpenFreeMap / Protomaps".
+- Recordings carry their own attribution string.
+- README lists every library, data source and API, plus known limitations.
+- No Flightradar24 data, exports, assets or interface copying.
+- One shared backend poll to respect provider limits.
+
+## 20. Known limitations (keep updated in README)
+
+- Coverage depends on community receivers. Gaps over the ocean are normal.
+- adsb.lol fields vary by aircraft; many are optional.
+- Flight number to callsign by prefix is not reliable for every airline.
+- Explanations describe patterns, not causes.
+- Not for safety-critical use.

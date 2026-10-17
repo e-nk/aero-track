@@ -41,6 +41,8 @@ Users:
 - "Seen by AeroTrack" counts per aircraft, from our own observations (11.9)
 - Aircraft photo from Planespotters.net, with photographer credit (5.7)
 - Altitude display: GPS altitude when available, else labelled pressure altitude (12.4)
+- Australia-wide overview layer from the OpenSky Network, about every 90 s, no insights (5.8, 11.10)
+- Follow a flight worldwide via adsb.lol multi-hex lookups, up to 10 at once, destination only when observed (5.1, 11.11)
 
 ### P2 (if time)
 - LLM phrasing layer (input: detector output only)
@@ -186,6 +188,8 @@ Endpoints (v2):
 
 Also listed but unused: `/v2/mil`, `/v2/ladd`, `/v2/pia`, `/api/0/airport/{icao}`, `/0/me`.
 
+Several aircraft in one request (verified 2026-10-17): `GET /v2/hex/{hex1},{hex2},...` returns each aircraft wherever adsb.lol has coverage (worldwide). Used for followed flights (11.11).
+
 Our poll: `GET /v2/point/-33.9/151.0/60` every 10 s (configurable, minimum 5 s). One request serves all clients. At 7 s we saw a 429 every 1-2 minutes on 2026-10-17, so 10 s is the default.
 
 Response envelope (verified):
@@ -317,6 +321,15 @@ Offline (P0): Protomaps PMTiles
   - Photos must not be a paid or member-only feature, and must not be used for ML datasets.
 - Honesty: label "Photo of {registration} by {photographer}, via Planespotters.net. It may not show the aircraft's current paint scheme." No photo → show nothing (no placeholder aircraft). Not available offline.
 
+### 5.8 OpenSky Network: Australia-wide overview (P1)
+
+- Purpose: show aircraft across Australia at low refresh. adsb.lol only offers circles up to 250 nm, and we're already rate-limited at one request per 10 s.
+- Endpoint: `GET https://opensky-network.org/api/states/all?lamin=-44&lomin=112&lamax=-10&lomax=154&extended=1`. Sample: `docs/samples/opensky-states-au.json` (63 aircraft at 11:30 pm Sydney time, 2026-10-17).
+- Auth: OAuth2 client credentials only. `POST https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token` with `grant_type=client_credentials`, `client_id`, `client_secret`; send `Authorization: Bearer {token}`. Tokens expire after 30 min; refresh early and on 401. Env: `OPENSKY_CLIENT_ID`, `OPENSKY_CLIENT_SECRET` (server only). Without them the overview is disabled (anonymous is only 400 credits a day).
+- Credits (verified 2026-10-17): per-endpoint daily buckets. Anonymous 400, standard user 4,000, active feeder 8,000. `/states/all` costs by bounding-box area: ≤25 sq° 1, 25-100 2, 100-400 3, >400 4. Australia (34° × 42° = 1,428 sq°) costs 4, so a standard account allows one poll every ~86 s. Default `overview.intervalMs` 90,000 (3,840 credits a day). 429 when exhausted, with `X-Rate-Limit-Retry-After-Seconds`.
+- Response: `{ time, states: [[icao24, callsign, origin_country, time_position, last_contact, longitude, latitude, baro_altitude (m), on_ground, velocity (m/s), true_track, vertical_rate (m/s), sensors, geo_altitude (m), squawk, spi, position_source, category]] }`. `states` can be null. Units are metric: the adapter converts to ft, kt and fpm. No aircraft type or registration. `category` was 0 ("no information") for 62 of 63 aircraft, so overview aircraft use the generic icon.
+- Terms: secondary sources say the data is for non-commercial / research use and ask for citation of OpenSky. The terms page (opensky-network.org/about/terms-of-use) blocks scripted access, so the owner reads it directly. AeroTrack is non-commercial. Attribute "Data: The OpenSky Network" on the map whenever overview aircraft are shown.
+
 ### 5.6 LLM phrasing (P2)
 
 - Server only, from `apps/api`. Never the browser.
@@ -400,6 +413,8 @@ export const THRESHOLDS = {
   buffer: { keepSec: 900 },
   writer: { flushMs: 5000, maxRows: 500 },
   sse: { heartbeatMs: 15000, maxBufferedBytes: 1000000 },
+  overview: { intervalMs: 90000, timeoutMs: 15000, bbox: { lamin: -44, lomin: 112, lamax: -10, lomax: 154 } },
+  follow: { maxFollowed: 10, intervalMs: 30000, afterLandingSec: 900, maxAgeSec: 86400 },
   display: { interpolateMaxSec: 15, sourceUpdateMs: 100, staleAfterSec: 30, altitudeBandsFt: [10000, 25000], levelRateFpm: 100 },
   hygiene: {
     maxImpliedGsKt: 1000,       // drop position jumps faster than this
@@ -652,6 +667,23 @@ sightings: id (uuid pk), hex, started_at, last_seen_at, took_off_at (null), take
 - Never deleted by retention (small rows). Counts only what our receivers' coverage showed; it is not a lifetime flight count.
 - `/api/aircraft/:hex` adds `sightings: { last7Days, total, firstSeenAt }`, including the current sighting even before it reaches the database.
 
+### 11.10 Australia-wide overview (OpenSky)
+- Second poller (`apps/api/src/overview/`), same pattern as the main one: one request for everyone, never overlapping, backoff on failure. Interval `overview.intervalMs`.
+- Adapter + Zod schema like adsb.lol. Drops states without a position and surface vehicles / obstacles (categories 16-20). Maps categories 2-8 to A1-A7 for display.
+- No detectors: updates every ~90 s would create false gap and signal-lost events. Overview aircraft never get insights, take-off/landing events or sightings.
+- Not written to Postgres (display only). Held in memory: latest list, `fetchedAt`, status.
+- SSE `overview` event: `{ fetchedAt, feedStatus, aircraft: OverviewCompact[] }` on connect and after each overview poll. `OverviewCompact = [hex, callsign, lat, lon, altFt, gsKt, trackDeg, onGround, lastPosTs]`.
+- Web: drawn as a second, lighter layer with the generic icon and no labels below zoom 8. Any hex in the detailed (adsb.lol) set or followed set is drawn from that set instead. Selecting an overview aircraft shows its basic fields, a photo, "Follow this flight", and "Australia-wide data from the OpenSky Network, updated about every 90 seconds. Detailed insights are available near Sydney and for followed flights." No dead reckoning beyond `display.interpolateMaxSec`, so overview aircraft move in steps; the label explains why.
+- `/health` adds `overview: { enabled, feedStatus, fetchedAt, aircraftCount }`.
+
+### 11.11 Follow a flight (worldwide)
+- `POST /api/follows/:hex` adds an aircraft, `DELETE /api/follows/:hex` removes it, `GET /api/follows` lists them. The list is shared by all viewers (one poll for everyone) and capped at `follow.maxFollowed` (10); a full list says "Following is full right now (10 flights). Try again later."
+- One adsb.lol request per `follow.intervalMs` (30 s) for all followed hexes (`/v2/hex/{a},{b},...`), through the same adapter (C* and TWR filters apply).
+- Followed aircraft get the full pipeline outside the Sydney circle: buffer, detectors, events, sightings, positions in Postgres. Inside the circle the main poll already covers them.
+- Take-off/landing worldwide uses a global airport list (OurAirports large and medium airports with an IATA code) kept on the server and passed to detectors through `DetectContext.airports`; detectors default to the Sydney list (the browser bundle stays small).
+- A follow ends automatically `follow.afterLandingSec` (15 min) after an observed landing, or after `follow.maxAgeSec` (24 h).
+- Honesty: no destination until a landing is observed ("Landed near {airport} at {time}"). Over the ocean there is usually no receiver coverage, so the aircraft can vanish for hours; the panel says "There's usually no receiver coverage over the ocean. The last known position is shown." The map never draws a path through missing data.
+
 ### 11.7 HTTP API
 
 | Method | Path | Returns |
@@ -812,6 +844,8 @@ R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
 R2_BUCKET=aerotrack
 R2_PUBLIC_BASE_URL=https://<public-r2-domain>
+OPENSKY_CLIENT_ID=            # Australia-wide overview (5.8); overview disabled if unset
+OPENSKY_CLIENT_SECRET=
 ANTHROPIC_API_KEY=            # P2 only
 ```
 
@@ -855,7 +889,7 @@ NEXT_PUBLIC_OFFLINE=0
 
 ## 19. Attribution and compliance
 
-- Map footer: "Data: ADSB.lol (ODbL) · © OpenStreetMap contributors · OpenFreeMap / Protomaps".
+- Map footer: "Data: ADSB.lol (ODbL) · © OpenStreetMap contributors · OpenFreeMap / Protomaps", plus "Data: The OpenSky Network" whenever overview aircraft are shown.
 - Recordings carry their own attribution string.
 - README lists every library, data source and API, plus known limitations.
 - No Flightradar24 data, exports, assets or interface copying.

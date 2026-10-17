@@ -29,11 +29,11 @@ Full spec: `docs/SPEC.md`. Read the relevant section before starting any task.
 2. Never invent positions, identities, routes or statuses. Missing data renders as "Not available".
 3. Every aircraft record and event carries its data mode: `live`, `recorded` or `fixture`. Modes are never mixed in one view.
 4. All thresholds live in `packages/shared/src/config/thresholds.ts`. No magic numbers in detectors.
-5. Provider responses pass through an adapter + Zod schema. UI and detectors never read raw adsb.lol fields.
-6. One backend poller serves all clients. Browsers never call adsb.lol directly.
+5. Provider responses pass through an adapter + Zod schema. UI and detectors never read raw provider fields (adsb.lol, OpenSky).
+6. One backend poller per provider serves all clients. Browsers never call adsb.lol or OpenSky directly. (Planespotters photos are the exception: their terms require the browser to fetch them.)
 7. Secrets only on the server. Nothing sensitive behind `NEXT_PUBLIC_`.
 8. Explanations never state a cause. Use "commonly", "possibly", "the data doesn't show why".
-9. Attribute ADSB.lol (ODbL) and OpenStreetMap/OpenFreeMap/Protomaps on the map.
+9. Attribute ADSB.lol (ODbL), The OpenSky Network (when overview aircraft are shown) and OpenStreetMap/OpenFreeMap/Protomaps on the map.
 10. No Flightradar24 data, assets, names or interface copying.
 
 ## Workflow

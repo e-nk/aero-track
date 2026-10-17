@@ -21,6 +21,7 @@ function setup(status: PollerStatus = { feedStatus: "ok", lastPollAt: T0 * 1000,
     repo,
     hub: new SseHub(THRESHOLDS.sse),
     sightings,
+    overview: null,
     status: () => status,
     nowSec: () => now,
     corsOrigin: ["http://localhost:3000"],
@@ -46,7 +47,13 @@ describe("api routes", () => {
     track(store, "7c0001", [T0]);
     const res = await app.inject("/health");
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true, feedStatus: "ok", lastPollAt: T0 * 1000, aircraftCount: 1 });
+    expect(res.json()).toEqual({ ok: true, feedStatus: "ok", lastPollAt: T0 * 1000, aircraftCount: 1, overview: { enabled: false } });
+  });
+
+  it("GET /health reports the overview as disabled when OpenSky isn't configured", async () => {
+    const { app } = setup();
+    close = () => app.close();
+    expect((await app.inject("/health")).json().overview).toEqual({ enabled: false });
   });
 
   it("GET /health reports a down feed but stays 200", async () => {

@@ -1,8 +1,9 @@
 import { EventLifecycle } from "@aerotrack/detectors";
-import { THRESHOLDS, fromCompact } from "@aerotrack/shared";
+import { THRESHOLDS, fromCompact, fromOverviewCompact } from "@aerotrack/shared";
 import { describe, expect, it } from "vitest";
 import { AircraftStore } from "../src/buffer";
-import { changeMessages, snapshotMessage, statusMessage } from "../src/streamMessages";
+import { OverviewStore } from "../src/overview/overviewStore";
+import { changeMessages, overviewMessage, snapshotMessage, statusMessage } from "../src/streamMessages";
 import { T0, obs, state } from "./helpers";
 
 function setup() {
@@ -18,6 +19,21 @@ const turn = (now: number) => ({
   windowStart: now,
   windowEnd: now,
   evidence: { totalDeg: 40 },
+});
+
+describe("overview message", () => {
+  it("carries fetch time, feed status and compact aircraft", () => {
+    const store = new OverviewStore();
+    expect(overviewMessage(store, "degraded")).toEqual(["overview", { fetchedAt: null, feedStatus: "degraded", aircraft: [] }]);
+    store.set(T0, [
+      { hex: "89505a", callsign: "RBA4070", lat: -22, lon: 148, altFt: 37075, altGeomFt: null, gsKt: 400, trackDeg: 306, baroRateFpm: 0, onGround: false, lastPosTs: T0 - 1 },
+    ]);
+    const [, data] = overviewMessage(store, "ok");
+    expect(data.fetchedAt).toBe(T0);
+    expect(data.feedStatus).toBe("ok");
+    expect(fromOverviewCompact(data.aircraft[0]!)).toMatchObject({ hex: "89505a", altFt: 37075 });
+    expect(store.size).toBe(1);
+  });
 });
 
 describe("stream messages", () => {

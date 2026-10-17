@@ -39,3 +39,27 @@ describe("loadEnv", () => {
     expect(loadEnv({ ...minimal, ADMIN_TOKEN: "", ANTHROPIC_API_KEY: "" }).ADMIN_TOKEN).toBeUndefined();
   });
 });
+
+describe("loadEnv: OpenSky", () => {
+  const base = {
+    DATABASE_URL: "postgres://aerotrack:aerotrack@localhost:5433/aerotrack",
+    ADSB_USER_AGENT: "AeroTrack/0.1 (+test@example.com)",
+  };
+
+  it("leaves the overview off when no OpenSky client is set", () => {
+    const env = loadEnv({ ...base, OPENSKY_CLIENT_ID: "", OPENSKY_CLIENT_SECRET: "" });
+    expect(env.OPENSKY_CLIENT_ID).toBeUndefined();
+    expect(env.OPENSKY_CLIENT_SECRET).toBeUndefined();
+  });
+
+  it("accepts both values", () => {
+    expect(loadEnv({ ...base, OPENSKY_CLIENT_ID: "id", OPENSKY_CLIENT_SECRET: "secret" })).toMatchObject({
+      OPENSKY_CLIENT_ID: "id",
+      OPENSKY_CLIENT_SECRET: "secret",
+    });
+  });
+
+  it("refuses only one of the two", () => {
+    expect(() => loadEnv({ ...base, OPENSKY_CLIENT_ID: "id" })).toThrow(/OPENSKY_CLIENT_SECRET/);
+  });
+});

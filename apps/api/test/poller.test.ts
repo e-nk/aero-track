@@ -178,6 +178,21 @@ describe("poller", () => {
     await p.stop();
   });
 
+  it("waits at least as long as the provider asks after a rate limit", async () => {
+    const starts: number[] = [];
+    const run = vi.fn(async () => {
+      starts.push(Date.now() - 1_792_200_000_000);
+      if (starts.length === 1) throw Object.assign(new Error("credits used up"), { retryAfterSec: 600 });
+    });
+    const p = make(run);
+    p.start();
+    await vi.advanceTimersByTimeAsync(600_000 - 1);
+    expect(run).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(starts).toEqual([0, 600_000]);
+    await p.stop();
+  });
+
   it("start() twice does not start a second loop", async () => {
     const run = vi.fn(async () => {});
     const p = make(run);

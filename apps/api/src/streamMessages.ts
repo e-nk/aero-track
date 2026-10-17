@@ -1,6 +1,15 @@
 import type { EventLifecycle, LifecycleChanges } from "@aerotrack/detectors";
-import { toCompact, type BehaviourEvent, type CompactAircraft, type DataMode, type FeedStatus } from "@aerotrack/shared";
+import {
+  toCompact,
+  toOverviewCompact,
+  type BehaviourEvent,
+  type CompactAircraft,
+  type DataMode,
+  type FeedStatus,
+  type OverviewCompact,
+} from "@aerotrack/shared";
 import type { AircraftStore } from "./buffer";
+import type { OverviewStore } from "./overview/overviewStore";
 import type { PollerStatus } from "./poller";
 
 // Payloads for /api/stream (SPEC 11.8). Each message is [event name, data].
@@ -12,11 +21,18 @@ export interface SnapshotData {
   aircraft: CompactAircraft[];
 }
 
+export interface OverviewData {
+  fetchedAt: number | null;
+  feedStatus: FeedStatus;
+  aircraft: OverviewCompact[];
+}
+
 export type StreamMessage =
   | ["snapshot", SnapshotData]
   | ["status", { feedStatus: FeedStatus; lastPollAt: number | null }]
   | ["event_open" | "event_update", BehaviourEvent]
-  | ["event_close", { id: string; hex: string; closedAt: number | null }];
+  | ["event_close", { id: string; hex: string; closedAt: number | null }]
+  | ["overview", OverviewData];
 
 export function snapshotMessage(args: {
   store: AircraftStore;
@@ -34,6 +50,10 @@ export function snapshotMessage(args: {
       aircraft: args.store.all().map((s) => toCompact(s, withEvents.has(s.hex))),
     },
   ];
+}
+
+export function overviewMessage(store: OverviewStore, feedStatus: FeedStatus): ["overview", OverviewData] {
+  return ["overview", { fetchedAt: store.fetchedAt, feedStatus, aircraft: store.all().map(toOverviewCompact) }];
 }
 
 export function statusMessage({ feedStatus, lastPollAt }: PollerStatus): StreamMessage {

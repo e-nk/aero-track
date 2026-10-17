@@ -1,18 +1,7 @@
+import { ProviderError } from "../errors";
 import { parseResponse, type ParsedResponse } from "./schema";
 
-export type ProviderErrorKind = "network" | "timeout" | "rate_limited" | "http" | "invalid_body";
-
-export class ProviderError extends Error {
-  constructor(
-    readonly kind: ProviderErrorKind,
-    message: string,
-    readonly status?: number,
-    options?: { cause?: unknown },
-  ) {
-    super(message, options);
-    this.name = "ProviderError";
-  }
-}
+export { ProviderError, type ProviderErrorKind } from "../errors";
 
 export interface AdsbLolClientOptions {
   baseUrl: string;

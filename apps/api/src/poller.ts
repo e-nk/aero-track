@@ -49,6 +49,9 @@ export function createPoller(opts: PollerOptions) {
       setFeedStatus(status.consecutiveFailures >= opts.downAfterFailures ? "down" : "degraded");
       opts.onError(err, status.consecutiveFailures);
       delay = Math.min(opts.maxBackoffMs, opts.intervalMs * 2 ** status.consecutiveFailures);
+      // Respect a provider's own "retry after" (e.g. OpenSky when credits run out).
+      const retryAfterSec = (err as { retryAfterSec?: unknown } | null)?.retryAfterSec;
+      if (typeof retryAfterSec === "number" && retryAfterSec > 0) delay = Math.max(delay, retryAfterSec * 1000);
     } finally {
       inFlight = undefined;
     }

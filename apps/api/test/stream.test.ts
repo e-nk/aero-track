@@ -5,6 +5,7 @@ import { THRESHOLDS } from "@aerotrack/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app";
 import { AircraftStore } from "../src/buffer";
+import { OverviewStore } from "../src/overview/overviewStore";
 import { SightingTracker } from "../src/sightings";
 import { SseHub } from "../src/sse";
 import { FakeRepo } from "./fakeRepo";
@@ -52,16 +53,19 @@ afterEach(async () => {
   cleanup = undefined;
 });
 
-async function start() {
+async function start(withOverview = false) {
   const store = new AircraftStore(THRESHOLDS);
   store.ingest([state("7c0001", obs(T0))]);
   const hub = new SseHub(THRESHOLDS.sse);
+  const overviewStore = new OverviewStore();
+  overviewStore.set(T0, []);
   const app = buildApp({
     store,
     lifecycle: new EventLifecycle({ thresholds: THRESHOLDS, mode: "live", newId: () => "ev" }),
     repo: new FakeRepo(),
     hub,
     sightings: new SightingTracker({ keepSec: THRESHOLDS.buffer.keepSec, newId: () => "s" }),
+    overview: withOverview ? { store: overviewStore, status: () => ({ feedStatus: "ok", lastPollAt: T0 * 1000, consecutiveFailures: 0 }) } : null,
     status: () => ({ feedStatus: "ok", lastPollAt: T0 * 1000, consecutiveFailures: 0 }),
     nowSec: () => T0,
     corsOrigin: ["http://localhost:3000"],
@@ -91,6 +95,15 @@ describe("GET /api/stream", () => {
     expect(snapshot).toMatchObject({ event: "snapshot", data: { now: T0, mode: "live", feedStatus: "ok" } });
     expect((snapshot!.data as { aircraft: unknown[][] }).aircraft.map((a) => a[0])).toEqual(["7c0001"]);
     expect(status).toEqual({ event: "status", data: { feedStatus: "ok", lastPollAt: T0 * 1000 } });
+    c.close();
+  });
+
+  it("also sends the Australia-wide overview on connect when it's enabled", async () => {
+    const { port } = await start(true);
+    const c = connect(port);
+    const messages = await c.waitFor(3);
+    expect(messages.map((m) => m.event)).toEqual(["snapshot", "status", "overview"]);
+    expect(messages[2]!.data).toEqual({ fetchedAt: T0, feedStatus: "ok", aircraft: [] });
     c.close();
   });
 

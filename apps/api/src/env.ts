@@ -24,7 +24,15 @@ const EnvSchema = z.object({
   R2_SECRET_ACCESS_KEY: optional,
   R2_BUCKET: optional,
   R2_PUBLIC_BASE_URL: optional,
+  // OpenSky API client for the Australia-wide overview (SPEC 5.8). Both or neither.
+  OPENSKY_CLIENT_ID: optional,
+  OPENSKY_CLIENT_SECRET: optional,
   ANTHROPIC_API_KEY: optional,
+}).superRefine((env, ctx) => {
+  if (!!env.OPENSKY_CLIENT_ID !== !!env.OPENSKY_CLIENT_SECRET) {
+    const missing = env.OPENSKY_CLIENT_ID ? "OPENSKY_CLIENT_SECRET" : "OPENSKY_CLIENT_ID";
+    ctx.addIssue({ code: "custom", path: [missing], message: "set both OpenSky values, or neither" });
+  }
 });
 
 export type Env = z.infer<typeof EnvSchema>;

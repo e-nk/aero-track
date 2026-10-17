@@ -13,6 +13,13 @@ export interface Thresholds {
   buffer: { keepSec: number };
   writer: { flushMs: number; maxRows: number };
   sse: { heartbeatMs: number; maxBufferedBytes: number };
+  overview: {
+    intervalMs: number;
+    timeoutMs: number;
+    maxBackoffMs: number;
+    bbox: { lamin: number; lomin: number; lamax: number; lomax: number };
+  };
+  follow: { maxFollowed: number; intervalMs: number; afterLandingSec: number; maxAgeSec: number };
   display: {
     interpolateMaxSec: number;
     sourceUpdateMs: number;
@@ -76,6 +83,18 @@ export const THRESHOLDS = {
   buffer: { keepSec: 900 }, // also: drop an aircraft this long after its last position
   writer: { flushMs: 5000, maxRows: 500 }, // batch positions, whichever comes first
   sse: { heartbeatMs: 15000, maxBufferedBytes: 1_000_000 }, // drop clients that fall this far behind
+  overview: {
+    intervalMs: 90_000, // OpenSky: Australia bbox costs 4 credits; 4,000 a day allows one poll per ~86 s
+    timeoutMs: 15_000,
+    maxBackoffMs: 900_000, // after failures, wait up to 15 min rather than burn credits
+    bbox: { lamin: -44, lomin: 112, lamax: -10, lomax: 154 }, // mainland Australia and Tasmania
+  },
+  follow: {
+    maxFollowed: 10, // shared by all viewers
+    intervalMs: 30_000, // one adsb.lol request for every followed aircraft
+    afterLandingSec: 900, // stop following 15 min after an observed landing
+    maxAgeSec: 86_400, // and never longer than 24 h
+  },
   display: {
     interpolateMaxSec: 15, // dead-reckon at most this far past the last fix
     sourceUpdateMs: 100, // map source updates at most 10 times per second

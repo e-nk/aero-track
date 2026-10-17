@@ -1,10 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { AppDeps } from "../app";
-import { snapshotMessage, statusMessage } from "../streamMessages";
+import { overviewMessage, snapshotMessage, statusMessage } from "../streamMessages";
 
 /** GET /api/stream: server-sent events (SPEC 11.8). Snapshot and status on connect. */
 export const streamRoutes =
-  ({ hub, store, lifecycle, status, nowSec }: AppDeps): FastifyPluginAsync =>
+  ({ hub, store, lifecycle, status, nowSec, overview }: AppDeps): FastifyPluginAsync =>
   async (app) => {
     app.get("/stream", (req, reply) => {
       // Keep headers set by hooks (CORS), then take over the raw response.
@@ -27,5 +27,9 @@ export const streamRoutes =
       hub.send(client, snapshotEvent, snapshot);
       const [statusEvent, statusData] = statusMessage(current);
       hub.send(client, statusEvent, statusData);
+      if (overview) {
+        const [overviewEvent, overviewData] = overviewMessage(overview.store, overview.status().feedStatus);
+        hub.send(client, overviewEvent, overviewData);
+      }
     });
   };

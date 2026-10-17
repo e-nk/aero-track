@@ -4,6 +4,7 @@ import Fastify, { type FastifyServerOptions } from "fastify";
 import type { AircraftStore } from "./buffer";
 import type { PollerStatus } from "./poller";
 import type { Repo } from "./repo";
+import type { OverviewStore } from "./overview/overviewStore";
 import type { SightingTracker } from "./sightings";
 import type { SseHub } from "./sse";
 import { aircraftRoutes } from "./routes/aircraft";
@@ -16,6 +17,8 @@ export interface AppDeps {
   repo: Pick<Repo, "recentEvents" | "sightingSummary">;
   hub: SseHub;
   sightings: SightingTracker;
+  /** Australia-wide overview; null when OpenSky is not configured. */
+  overview: { store: OverviewStore; status: () => PollerStatus } | null;
   status: () => PollerStatus;
   /** Current time for track windows, epoch seconds (the latest poll's provider clock). */
   nowSec: () => number;

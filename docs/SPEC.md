@@ -413,7 +413,7 @@ export const THRESHOLDS = {
   buffer: { keepSec: 900 },
   writer: { flushMs: 5000, maxRows: 500 },
   sse: { heartbeatMs: 15000, maxBufferedBytes: 1000000 },
-  overview: { intervalMs: 90000, timeoutMs: 15000, bbox: { lamin: -44, lomin: 112, lamax: -10, lomax: 154 } },
+  overview: { intervalMs: 90000, timeoutMs: 15000, maxBackoffMs: 900000, bbox: { lamin: -44, lomin: 112, lamax: -10, lomax: 154 } },
   follow: { maxFollowed: 10, intervalMs: 30000, afterLandingSec: 900, maxAgeSec: 86400 },
   display: { interpolateMaxSec: 15, sourceUpdateMs: 100, staleAfterSec: 30, altitudeBandsFt: [10000, 25000], levelRateFpm: 100 },
   hygiene: {
@@ -672,7 +672,7 @@ sightings: id (uuid pk), hex, started_at, last_seen_at, took_off_at (null), take
 - Adapter + Zod schema like adsb.lol. Drops states without a position and surface vehicles / obstacles (categories 16-20). Maps categories 2-8 to A1-A7 for display.
 - No detectors: updates every ~90 s would create false gap and signal-lost events. Overview aircraft never get insights, take-off/landing events or sightings.
 - Not written to Postgres (display only). Held in memory: latest list, `fetchedAt`, status.
-- SSE `overview` event: `{ fetchedAt, feedStatus, aircraft: OverviewCompact[] }` on connect and after each overview poll. `OverviewCompact = [hex, callsign, lat, lon, altFt, gsKt, trackDeg, onGround, lastPosTs]`.
+- SSE `overview` event: `{ fetchedAt, feedStatus, aircraft: OverviewCompact[] }` on connect and after each overview poll. `OverviewCompact = [hex, callsign, lat, lon, altFt, altGeomFt, gsKt, trackDeg, baroRateFpm, onGround, lastPosTs]` (`packages/shared/src/overview.ts`).
 - Web: drawn as a second, lighter layer with the generic icon and no labels below zoom 8. Any hex in the detailed (adsb.lol) set or followed set is drawn from that set instead. Selecting an overview aircraft shows its basic fields, a photo, "Follow this flight", and "Australia-wide data from the OpenSky Network, updated about every 90 seconds. Detailed insights are available near Sydney and for followed flights." No dead reckoning beyond `display.interpolateMaxSec`, so overview aircraft move in steps; the label explains why.
 - `/health` adds `overview: { enabled, feedStatus, fetchedAt, aircraftCount }`.
 

@@ -15,7 +15,12 @@ export function useSelectedAircraft(): void {
   useEffect(() => {
     if (!hex) return;
     const ctrl = new AbortController();
-    const { setSelection, seedEvents } = useAircraftStore.getState();
+    const { setSelection, seedEvents, aircraft, overview } = useAircraftStore.getState();
+    // Overview-only aircraft have no history or events on the server (SPEC 11.10).
+    if (!aircraft[hex] && overview?.aircraft[hex]) {
+      setSelection(hex, { status: "ready", detail: null, segments: [] });
+      return;
+    }
 
     Promise.all([fetchDetail(hex, ctrl.signal), fetchTrack(hex, ctrl.signal)])
       .then(([detail, segments]) => {

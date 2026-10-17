@@ -21,3 +21,13 @@ export function liveBadge(s: LiveState, nowMs: number, staleAfterSec: number): B
   const stale = s.feedStatus === "degraded" || ago > staleAfterSec;
   return { tone: stale ? "stale" : "live", text: `Live · updated ${ago}s ago` };
 }
+
+/** Second badge for the Australia-wide overview. Null when the overview is off. */
+export function overviewBadge(o: LiveState["overview"], nowMs: number): Badge | null {
+  if (!o) return null;
+  if (o.feedStatus === "down") return { tone: "down", text: "Australia-wide data unavailable · showing the last update" };
+  if (o.fetchedAt === null) return { tone: "pending", text: "Australia-wide · waiting for the first update" };
+  const sec = Math.max(0, Math.floor((nowMs - o.receivedAtMs) / 1000));
+  const ago = sec < 60 ? `${sec}s ago` : `${Math.round(sec / 60)} min ago`;
+  return { tone: o.feedStatus === "degraded" ? "stale" : "live", text: `Australia-wide · updated ${ago}` };
+}

@@ -11,6 +11,7 @@ export interface AircraftFeatureProps {
   rotation: number;
   stale: boolean;
   hasEvent: boolean;
+  source?: "live" | "overview";
 }
 
 export interface AircraftFeatureCollection {

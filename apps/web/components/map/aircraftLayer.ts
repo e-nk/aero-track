@@ -3,6 +3,8 @@ import { PALETTE } from "../../lib/palette";
 
 export const AIRCRAFT_SOURCE = "aircraft";
 export const TRACK_SOURCE = "selected-track";
+export const OVERVIEW_SOURCE = "overview";
+export const COVERAGE_SOURCE = "coverage";
 
 // One symbol layer for every aircraft (SPEC 12.3). No HTML markers.
 export const aircraftLayer: SymbolLayerSpecification = {
@@ -49,11 +51,46 @@ export const eventBadgeLayer: CircleLayerSpecification = {
   },
 };
 
-// Ring around the selected aircraft.
-export const selectedLayer = (hex: string | null): CircleLayerSpecification => ({
-  id: "aircraft-selected",
+// Australia-wide overview (SPEC 11.10): smaller, lighter, labels only when zoomed in.
+export const overviewLayer: SymbolLayerSpecification = {
+  ...aircraftLayer,
+  id: "overview",
+  source: OVERVIEW_SOURCE,
+  layout: {
+    ...aircraftLayer.layout,
+    "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 0.4, 8, 0.6, 12, 0.85],
+    "text-field": ["step", ["zoom"], "", 8, ["coalesce", ["get", "callsign"], ""]],
+  },
+  paint: { ...aircraftLayer.paint, "icon-opacity": ["case", ["get", "stale"], 0.35, 0.8] },
+};
+
+// Outline of the detailed live area around Sydney.
+export const coverageLineLayer: LineLayerSpecification = {
+  id: "coverage-line",
+  type: "line",
+  source: COVERAGE_SOURCE,
+  paint: { "line-color": PALETTE.teal, "line-width": 1.2, "line-opacity": 0.5, "line-dasharray": [3, 3] },
+};
+
+export const coverageLabelLayer: SymbolLayerSpecification = {
+  id: "coverage-label",
+  type: "symbol",
+  source: COVERAGE_SOURCE,
+  minzoom: 6,
+  layout: {
+    "symbol-placement": "line",
+    "text-field": "Live coverage area (detailed insights)",
+    "text-font": ["Noto Sans Regular"],
+    "text-size": 11,
+  },
+  paint: { "text-color": PALETTE.teal, "text-halo-color": PALETTE.navy, "text-halo-width": 1.2, "text-opacity": 0.8 },
+};
+
+// Ring around the selected aircraft, on whichever layer draws it.
+export const selectedLayer = (hex: string | null, source = AIRCRAFT_SOURCE): CircleLayerSpecification => ({
+  id: `${source}-selected`,
   type: "circle",
-  source: AIRCRAFT_SOURCE,
+  source,
   filter: ["==", ["get", "hex"], hex ?? ""],
   paint: {
     "circle-radius": 16,

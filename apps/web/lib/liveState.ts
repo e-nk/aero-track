@@ -5,6 +5,9 @@ import {
   type DataMode,
   type DecodedAircraft,
   type FeedStatus,
+  type OverviewAircraft,
+  type OverviewCompact,
+  fromOverviewCompact,
 } from "@aerotrack/shared";
 
 // Pure state transitions for live mode. The Zustand store wraps these.
@@ -24,6 +27,13 @@ export interface LiveState {
   serverNow: number | null;
   aircraft: Record<string, LiveAircraft>;
   events: Record<string, BehaviourEvent>;
+  /** Australia-wide overview (OpenSky), or null when the server has it switched off. */
+  overview: {
+    fetchedAt: number | null; // provider clock, epoch seconds
+    feedStatus: FeedStatus;
+    receivedAtMs: number; // browser clock when this data arrived
+    aircraft: Record<string, OverviewAircraft>;
+  } | null;
 }
 
 export const initialLiveState: LiveState = {
@@ -34,6 +44,7 @@ export const initialLiveState: LiveState = {
   serverNow: null,
   aircraft: {},
   events: {},
+  overview: null,
 };
 
 export interface SnapshotData {
@@ -82,4 +93,23 @@ export function openEventsFor(events: Record<string, BehaviourEvent>, hex: strin
   return Object.values(events)
     .filter((e) => e.hex === hex)
     .sort((a, b) => b.openedAt - a.openedAt);
+}
+
+export interface OverviewData {
+  fetchedAt: number | null;
+  feedStatus: FeedStatus;
+  aircraft: OverviewCompact[];
+}
+
+/** New overview data replaces the old; a status-only message (same fetchedAt) just updates the status. */
+export function applyOverview(s: LiveState, data: OverviewData, receivedAtMs: number): LiveState {
+  if (s.overview && data.fetchedAt === s.overview.fetchedAt) {
+    return { ...s, overview: { ...s.overview, feedStatus: data.feedStatus } };
+  }
+  const aircraft: Record<string, OverviewAircraft> = {};
+  for (const c of data.aircraft) {
+    const a = fromOverviewCompact(c);
+    aircraft[a.hex] = a;
+  }
+  return { ...s, overview: { fetchedAt: data.fetchedAt, feedStatus: data.feedStatus, receivedAtMs, aircraft } };
 }

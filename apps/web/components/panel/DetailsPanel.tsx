@@ -30,12 +30,36 @@ function Row({ label, value, note }: { label: string; value: string; note?: stri
   );
 }
 
+// Right panel on desktop, bottom panel on mobile; never covers the map attribution.
+const PANEL_CLASS =
+  "absolute inset-x-0 bottom-11 z-20 max-h-[55dvh] overflow-y-auto rounded-t-2xl border-t border-white/10 bg-navy/95 p-4 text-text shadow-2xl backdrop-blur md:bottom-9 md:left-auto md:right-3 md:top-3 md:max-h-none md:w-96 md:rounded-2xl md:border";
+
+function PanelHeader({ title, subtitle, onClose }: { title: string; subtitle: string; onClose: () => void }) {
+  return (
+    <header className="mb-4 flex items-start justify-between gap-3">
+      <div>
+        <h2 className="text-xl font-semibold">{title}</h2>
+        <p className="text-sm text-muted">{subtitle}</p>
+      </div>
+      <button
+        type="button"
+        onClick={onClose}
+        className="rounded-full px-3 py-1 text-sm text-muted hover:bg-white/10 hover:text-text"
+        aria-label="Close details"
+      >
+        Close
+      </button>
+    </header>
+  );
+}
+
 /** Details for the selected aircraft (SPEC 12.4). Right panel on desktop, bottom panel on mobile. */
 export function DetailsPanel() {
   const hex = useAircraftStore((s) => s.selectedHex);
   const live = useAircraftStore((s) => (s.selectedHex ? s.aircraft[s.selectedHex] : undefined));
   const selection = useAircraftStore((s) => s.selection);
   const events = useAircraftStore((s) => s.events);
+  const overview = useAircraftStore((s) => s.overview);
   const select = useAircraftStore((s) => s.select);
   const now = useNow();
 
@@ -48,6 +72,34 @@ export function DetailsPanel() {
 
   if (!hex) return null;
 
+  // Australia-wide overview aircraft (not in the detailed set): basic fields only.
+  const ov = !live ? overview?.aircraft[hex] : undefined;
+  if (ov && overview) {
+    const ovAge = now === null ? null : (overview.fetchedAt ?? ov.lastPosTs) - ov.lastPosTs + (now - overview.receivedAtMs) / 1000;
+    return (
+      <aside aria-label="Aircraft details" className={PANEL_CLASS}>
+        <PanelHeader title={ov.callsign ?? "Callsign not available"} subtitle={`Australia-wide data · ${hex}`} onClose={() => select(null)} />
+        <AircraftPhoto hex={hex} registration={null} />
+        <section aria-labelledby="ov-now-h" className="mb-5">
+          <h3 id="ov-now-h" className="mb-1 text-xs uppercase tracking-wide text-muted">
+            Now
+          </h3>
+          <dl className="divide-y divide-white/5 text-sm">
+            <Row label="Altitude" value={displayAltitude(ov).text} note={displayAltitude(ov).note} />
+            <Row label="Speed" value={formatSpeed(ov.gsKt)} />
+            <Row label="Heading" value={formatHeading(ov.trackDeg)} />
+            <Row label="Vertical speed" value={formatVerticalRate(ov.baroRateFpm, THRESHOLDS.display.levelRateFpm)} />
+            <Row label="Last position" value={ovAge === null ? NOT_AVAILABLE : formatAge(ovAge)} />
+          </dl>
+        </section>
+        <p className="text-sm text-text/90">
+          Australia-wide data from the OpenSky Network, updated about every 90 seconds. Detailed insights are available near
+          Sydney and for followed flights.
+        </p>
+      </aside>
+    );
+  }
+
   const detail = selection.detail;
   const state = detail?.state;
   const callsign = live?.callsign ?? state?.callsign ?? null;
@@ -57,24 +109,8 @@ export function DetailsPanel() {
   const ageSec = live && now !== null ? live.serverNow - live.lastPosTs + (now - live.receivedAtMs) / 1000 : null;
 
   return (
-    <aside
-      aria-label="Aircraft details"
-      className="absolute inset-x-0 bottom-11 z-20 max-h-[55dvh] overflow-y-auto rounded-t-2xl border-t border-white/10 bg-navy/95 p-4 text-text shadow-2xl backdrop-blur md:bottom-9 md:left-auto md:right-3 md:top-3 md:max-h-none md:w-96 md:rounded-2xl md:border"
-    >
-      <header className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold">{callsign ?? "Callsign not available"}</h2>
-          <p className="text-sm text-muted">Live data · {hex}</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => select(null)}
-          className="rounded-full px-3 py-1 text-sm text-muted hover:bg-white/10 hover:text-text"
-          aria-label="Close details"
-        >
-          Close
-        </button>
-      </header>
+    <aside aria-label="Aircraft details" className={PANEL_CLASS}>
+      <PanelHeader title={callsign ?? "Callsign not available"} subtitle={`Live data · ${hex}`} onClose={() => select(null)} />
 
       {selection.status === "not_found" && !live ? (
         <p className="text-sm text-text/90">

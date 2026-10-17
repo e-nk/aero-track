@@ -13,14 +13,21 @@ import Map, {
   type MapRef,
 } from "react-map-gl/maplibre";
 import { buildAircraftFeatures } from "../../lib/aircraftFeatures";
-import { DATA_ATTRIBUTION, MAP_STYLE_URL, SYDNEY_VIEW } from "../../lib/config";
+import { AUSTRALIA_VIEW, DATA_ATTRIBUTION, MAP_STYLE_URL, OPENSKY_ATTRIBUTION } from "../../lib/config";
+import { coverageCircle } from "../../lib/coverage";
+import { buildOverviewFeatures } from "../../lib/overviewFeatures";
 import { trackFeature } from "../../lib/trackFeature";
 import { useAircraftStore } from "../../store/aircraftStore";
 import {
   AIRCRAFT_SOURCE,
+  COVERAGE_SOURCE,
+  OVERVIEW_SOURCE,
   TRACK_SOURCE,
   aircraftLayer,
+  coverageLabelLayer,
+  coverageLineLayer,
   eventBadgeLayer,
+  overviewLayer,
   selectedLayer,
   trackLayer,
 } from "./aircraftLayer";
@@ -30,6 +37,7 @@ import { addAircraftIcons } from "./icons";
 setWorkerUrl("/maplibre-gl-worker.mjs");
 
 const EMPTY = { type: "FeatureCollection" as const, features: [] };
+const COVERAGE = coverageCircle(THRESHOLDS.poll.centre, THRESHOLDS.poll.radiusNm);
 
 // Panel sizes from DetailsPanel: bottom 55% on mobile, 24rem (+ margin) on the right from md.
 const MD_BREAKPOINT_PX = 768;
@@ -58,6 +66,9 @@ export default function AircraftMap() {
   const segments = useAircraftStore((s) => s.selection.segments);
   const select = useAircraftStore((s) => s.select);
   const track = trackFeature(segments) ?? EMPTY;
+  // OpenSky attribution only while overview aircraft are shown (rule 9).
+  const showsOverview = useAircraftStore((s) => !!s.overview && Object.keys(s.overview.aircraft).length > 0);
+  const attribution = showsOverview ? `${DATA_ATTRIBUTION} · ${OPENSKY_ATTRIBUTION}` : DATA_ATTRIBUTION;
 
   // Click an aircraft to select it; click empty map to clear.
   const onClick = useCallback(
@@ -91,9 +102,17 @@ export default function AircraftMap() {
     const tick = (t: number) => {
       if (t - last >= THRESHOLDS.display.sourceUpdateMs) {
         last = t;
-        const source = mapRef.current?.getMap().getSource(AIRCRAFT_SOURCE) as GeoJSONSource | undefined;
-        const aircraft = Object.values(useAircraftStore.getState().aircraft);
-        source?.setData(buildAircraftFeatures(aircraft, Date.now(), THRESHOLDS.display));
+        const map = mapRef.current?.getMap();
+        const { aircraft, overview } = useAircraftStore.getState();
+        const live = Object.values(aircraft);
+        const now = Date.now();
+        (map?.getSource(AIRCRAFT_SOURCE) as GeoJSONSource | undefined)?.setData(buildAircraftFeatures(live, now, THRESHOLDS.display));
+        if (overview) {
+          const skip = new Set(live.map((a) => a.hex));
+          (map?.getSource(OVERVIEW_SOURCE) as GeoJSONSource | undefined)?.setData(
+            buildOverviewFeatures(overview, skip, now, THRESHOLDS.display),
+          );
+        }
       }
       frame = requestAnimationFrame(tick);
     };
@@ -104,21 +123,30 @@ export default function AircraftMap() {
   return (
     <Map
       ref={mapRef}
-      initialViewState={SYDNEY_VIEW}
+      initialViewState={AUSTRALIA_VIEW}
       mapStyle={MAP_STYLE_URL}
       attributionControl={false}
       onLoad={onLoad}
-      interactiveLayerIds={iconsReady ? [aircraftLayer.id] : []}
+      interactiveLayerIds={iconsReady ? [aircraftLayer.id, overviewLayer.id] : []}
       onClick={onClick}
       onMouseEnter={() => setCursor("pointer")}
       onMouseLeave={() => setCursor("")}
       cursor={cursor}
       style={{ position: "absolute", inset: 0 }}
     >
-      <AttributionControl customAttribution={DATA_ATTRIBUTION} compact={false} position="bottom-right" />
+      {/* Remount when the text changes: the control reads customAttribution once. */}
+      <AttributionControl key={attribution} customAttribution={attribution} compact={false} position="bottom-right" />
       <NavigationControl position="top-left" showCompass={false} />
       {iconsReady && (
         <>
+          <Source id={COVERAGE_SOURCE} type="geojson" data={COVERAGE}>
+            <Layer {...coverageLineLayer} />
+            <Layer {...coverageLabelLayer} />
+          </Source>
+          <Source id={OVERVIEW_SOURCE} type="geojson" data={EMPTY}>
+            <Layer {...selectedLayer(selectedHex, OVERVIEW_SOURCE)} />
+            <Layer {...overviewLayer} />
+          </Source>
           <Source id={TRACK_SOURCE} type="geojson" data={track}>
             <Layer {...trackLayer} />
           </Source>

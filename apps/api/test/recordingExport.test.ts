@@ -29,7 +29,7 @@ describe("buildRecording", () => {
       source: "ADSB.lol live capture",
       attribution: "Data: ADSB.lol (ODbL)",
       capturedFrom: T0,
-      capturedTo: T0 + 600,
+      capturedTo: T0 + 14,
       reportedCause: null,
     });
   });
@@ -52,6 +52,11 @@ describe("buildRecording", () => {
 
   it("computes a bounding box around every point", () => {
     expect(rec.bbox).toEqual([151, -33.95, 151.2, -33.8]);
+  });
+
+  it("covers only the time the data actually spans, within the requested window", () => {
+    const late = buildRecording({ title: "Late start", from: T0 - 300, to: T0 + 600, rows, identities });
+    expect([late.capturedFrom, late.capturedTo]).toEqual([T0, T0 + 14]);
   });
 
   it("limits to the given aircraft", () => {

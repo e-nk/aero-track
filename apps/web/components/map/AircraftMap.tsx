@@ -58,7 +58,8 @@ function revealUnderPanel(e: MapLayerMouseEvent) {
   });
 }
 
-export default function AircraftMap() {
+/** initialBounds ([west, south, east, north]) fits the map to a recording; otherwise all of Australia. */
+export default function AircraftMap({ initialBounds }: { initialBounds?: [number, number, number, number] } = {}) {
   const mapRef = useRef<MapRef>(null);
   const [iconsReady, setIconsReady] = useState(false);
   const [cursor, setCursor] = useState<string>("");
@@ -140,7 +141,7 @@ export default function AircraftMap() {
   return (
     <Map
       ref={mapRef}
-      initialViewState={AUSTRALIA_VIEW}
+      initialViewState={initialBounds ? { bounds: initialBounds, fitBoundsOptions: { padding: { top: 70, bottom: 170, left: 40, right: 40 }, maxZoom: 10 } /* room for header and replay controls */ } : AUSTRALIA_VIEW}
       mapStyle={MAP_STYLE_URL}
       attributionControl={false}
       onLoad={onLoad}

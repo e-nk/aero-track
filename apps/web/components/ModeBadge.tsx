@@ -1,7 +1,7 @@
 "use client";
 
 import { THRESHOLDS } from "@aerotrack/shared";
-import { liveBadge, overviewBadge, type Badge, type BadgeTone } from "../lib/badge";
+import { liveBadge, overviewBadge, recordedBadge, type Badge, type BadgeTone } from "../lib/badge";
 import { useNow } from "../lib/useNow";
 import { useAircraftStore } from "../store/aircraftStore";
 
@@ -25,6 +25,13 @@ function Pill({ badge }: { badge: Badge }) {
 export function ModeBadge() {
   const state = useAircraftStore();
   const now = useNow();
+  if (state.mode === "recorded" && state.replay) {
+    return (
+      <div role="status" aria-live="polite" className="flex flex-wrap items-center gap-2">
+        <Pill badge={recordedBadge(state.replay)} />
+      </div>
+    );
+  }
   const badge = liveBadge(state, now ?? state.lastSnapshotAt ?? 0, THRESHOLDS.display.staleAfterSec);
   const overview = now === null ? null : overviewBadge(state.overview, now);
   return (

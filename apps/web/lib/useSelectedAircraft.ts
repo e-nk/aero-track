@@ -15,7 +15,8 @@ export function useSelectedAircraft(): void {
   useEffect(() => {
     if (!hex) return;
     const ctrl = new AbortController();
-    const { setSelection, seedEvents, aircraft, overview } = useAircraftStore.getState();
+    const { setSelection, seedEvents, aircraft, overview, mode } = useAircraftStore.getState();
+    if (mode === "recorded") return; // the replay supplies details and track (SPEC 12.5)
     // Overview-only aircraft have no history or events on the server (SPEC 11.10).
     if (!aircraft[hex] && overview?.aircraft[hex]) {
       setSelection(hex, { status: "ready", detail: null, segments: [] });

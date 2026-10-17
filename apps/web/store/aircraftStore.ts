@@ -1,4 +1,4 @@
-import type { Observation } from "@aerotrack/shared";
+import type { BehaviourEvent, Observation, RecordingFile } from "@aerotrack/shared";
 import { create } from "zustand";
 import type { AircraftDetail } from "../lib/api";
 import {
@@ -10,6 +10,7 @@ import {
   applySnapshot,
   applyStatus,
   initialLiveState,
+  type LiveAircraft,
   type LiveState,
 } from "../lib/liveState";
 import type { LiveHandlers } from "../lib/sse";
@@ -22,8 +23,27 @@ export interface Selection {
 
 const EMPTY_SELECTION: Selection = { status: "loading", detail: null, segments: [] };
 
+export interface ReplayInfo {
+  id: string;
+  title: string;
+  start: number;
+  end: number;
+  clock: number;
+  speed: number;
+  playing: boolean;
+  attribution: string;
+  reportedCause: RecordingFile["reportedCause"];
+}
+
 interface AircraftStore extends LiveState {
   mode: "live" | "recorded";
+  /** Recorded mode only: the recording being replayed and its controls. */
+  replay: ReplayInfo | null;
+  /** Clear everything and enter recorded mode (modes never mix, SPEC 12.1). */
+  startRecorded: (info: ReplayInfo) => void;
+  /** One replay frame: aircraft and open events at the replay clock. */
+  setReplayFrame: (clock: number, aircraft: LiveAircraft[], events: BehaviourEvent[]) => void;
+  setReplayControls: (patch: Partial<Pick<ReplayInfo, "speed" | "playing">>) => void;
   handlers: LiveHandlers;
   selectedHex: string | null;
   selection: Selection;
@@ -39,6 +59,16 @@ interface AircraftStore extends LiveState {
 export const useAircraftStore = create<AircraftStore>()((set) => ({
   ...initialLiveState,
   mode: "live",
+  replay: null,
+  startRecorded: (info) =>
+    set({ ...initialLiveState, mode: "recorded", replay: info, selectedHex: null, selection: EMPTY_SELECTION, focus: null }),
+  setReplayFrame: (clock, aircraft, events) =>
+    set((s) => ({
+      replay: s.replay && { ...s.replay, clock },
+      aircraft: Object.fromEntries(aircraft.map((a) => [a.hex, a])),
+      events: Object.fromEntries(events.map((e) => [e.id, e])),
+    })),
+  setReplayControls: (patch) => set((s) => ({ replay: s.replay && { ...s.replay, ...patch } })),
   handlers: {
     onConnection: (connection) => set({ connection }),
     onSnapshot: (data) => set((s) => applySnapshot(s, data, Date.now())),
@@ -58,5 +88,5 @@ export const useAircraftStore = create<AircraftStore>()((set) => ({
     set((s) => (s.selectedHex === hex ? { selection: { ...s.selection, ...patch } } : {})),
   seedEvents: (detail) => set((s) => applyEventsSeed(s, detail.state.hex, detail.openEvents)),
   // Switching mode clears the map and store (SPEC 12.1).
-  reset: () => set({ ...initialLiveState, selectedHex: null, selection: EMPTY_SELECTION, focus: null }),
+  reset: () => set({ ...initialLiveState, mode: "live", replay: null, selectedHex: null, selection: EMPTY_SELECTION, focus: null }),
 }));

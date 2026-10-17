@@ -1,5 +1,7 @@
 // Public, build-time configuration. Nothing secret belongs here (NEXT_PUBLIC_ is sent to browsers).
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+/** Offline demo mode (SPEC 13): no live stream, recordings and tiles from public/. */
+export const OFFLINE = process.env.NEXT_PUBLIC_OFFLINE === "1";
 export const MAP_STYLE_URL = process.env.NEXT_PUBLIC_MAP_STYLE_URL ?? "https://tiles.openfreemap.org/styles/fiord";
 
 // Opens on all of Australia; the detailed live area around Sydney is outlined (SPEC 11.10).

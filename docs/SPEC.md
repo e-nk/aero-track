@@ -157,7 +157,7 @@ aerotrack/
       test/fixtures/*.ts
       test/*.test.ts
   scripts/
-    export-recording.ts          # Postgres window -> recording JSON
+    export-recording.ts          # moved to apps/api/scripts/export-recording.ts (needs the db): pnpm --filter api recording:export
     import-globe-history.ts      # archive trace -> recording JSON
     build-airlines.ts            # OpenFlights -> airlines.ts
 ```
@@ -485,7 +485,7 @@ Used for live captures, archive imports and test fixtures. Stored in Postgres (`
 }
 ```
 - `points` tuple: `[t, lat, lon, altFt|null, gsKt|null, trackDeg|null, baroRateFpm|null, onGround, squawk|null]`. `onGround` is needed for take-off/landing replay; `squawk` for the emergency detector. Barometric altitude only (never GPS), like the live detectors.
-- Exported from `positions` (live mode) and `aircraft` identity for a time window, optionally limited to some hexes.
+- Exported from `positions` (live mode) and `aircraft` identity for a time window, optionally limited to some hexes. `capturedFrom`/`capturedTo` are trimmed to the first and last point inside the requested window, so a replay never opens on an empty map.
 - `reportedCause` (optional): `{ "text": "...", "sourceUrl": "...", "sourceName": "..." }`. Shown separately as "Later reported as ... [source]". Never mixed into detector output.
 - Fixture files use `"mode": "fixture"` and fake callsigns like `TEST01`.
 

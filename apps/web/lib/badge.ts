@@ -1,3 +1,4 @@
+import { DISPLAY_TIME_ZONE } from "@aerotrack/shared";
 import type { LiveState } from "./liveState";
 
 export type BadgeTone = "pending" | "live" | "stale" | "down";
@@ -30,4 +31,20 @@ export function overviewBadge(o: LiveState["overview"], nowMs: number): Badge | 
   const sec = Math.max(0, Math.floor((nowMs - o.receivedAtMs) / 1000));
   const ago = sec < 60 ? `${sec}s ago` : `${Math.round(sec / 60)} min ago`;
   return { tone: o.feedStatus === "degraded" ? "stale" : "live", text: `Australia-wide · updated ${ago}` };
+}
+
+const replayTime = new Intl.DateTimeFormat("en-AU", {
+  timeZone: DISPLAY_TIME_ZONE,
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+});
+
+/** Recorded mode badge (SPEC 12.2): "Recorded flight · {date, time} · {speed}x · Data: ADSB.lol (ODbL)". */
+export function recordedBadge(r: { clock: number; speed: number; attribution: string; playing: boolean }): Badge {
+  const when = replayTime.format(new Date(r.clock * 1000)).replace(/\s?(am|pm)$/i, (m) => m.toLowerCase().replace(/^\s?/, " "));
+  return { tone: "live", text: `Recorded flight · ${when} · ${r.playing ? `${r.speed}x` : "paused"} · ${r.attribution}` };
 }

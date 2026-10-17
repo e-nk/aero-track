@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useEffect } from "react";
 import { API_URL } from "../lib/config";
 import { connectLive } from "../lib/sse";
@@ -16,6 +17,7 @@ const AircraftMap = dynamic(() => import("./map/AircraftMap"), { ssr: false });
 export function LiveView() {
   useSelectedAircraft();
   const hasFollows = useAircraftStore((s) => (s.follows?.follows.length ?? 0) > 0);
+  const feedDown = useAircraftStore((s) => s.feedStatus === "down" || s.connection === "reconnecting");
 
   useEffect(() => {
     const { handlers, reset } = useAircraftStore.getState();
@@ -36,6 +38,12 @@ export function LiveView() {
         <div className="pointer-events-auto">
           <ModeBadge />
         </div>
+        <Link
+          href="/recorded"
+          className="pointer-events-auto rounded-full border border-white/10 bg-navy/90 px-3 py-1.5 text-sm text-sky shadow-lg hover:bg-white/5"
+        >
+          {feedDown ? "Watch a recorded flight" : "Recorded flights"}
+        </Link>
         <div className="pointer-events-auto basis-full">
           <FollowingList />
         </div>

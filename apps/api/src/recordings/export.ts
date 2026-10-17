@@ -59,8 +59,11 @@ export function buildRecording(input: BuildRecordingInput): RecordingFile {
 
   // A loop rather than Math.min(...): long recordings can exceed the argument limit.
   let [minLon, minLat, maxLon, maxLat] = [Infinity, Infinity, -Infinity, -Infinity];
+  let [firstT, lastT] = [Infinity, -Infinity];
   for (const a of aircraft) {
-    for (const [, lat, lon] of a.points) {
+    for (const [t, lat, lon] of a.points) {
+      firstT = Math.min(firstT, t);
+      lastT = Math.max(lastT, t);
       minLon = Math.min(minLon, lon);
       maxLon = Math.max(maxLon, lon);
       minLat = Math.min(minLat, lat);
@@ -74,8 +77,9 @@ export function buildRecording(input: BuildRecordingInput): RecordingFile {
     mode: "recorded",
     source: input.source ?? "ADSB.lol live capture",
     attribution: input.attribution ?? "Data: ADSB.lol (ODbL)",
-    capturedFrom: input.from,
-    capturedTo: input.to,
+    // The span the data actually covers (gaps at either end are trimmed), so a replay never opens on an empty map.
+    capturedFrom: Math.max(input.from, Math.floor(firstT)),
+    capturedTo: Math.min(input.to, Math.ceil(lastT)),
     bbox: [round6(minLon), round6(minLat), round6(maxLon), round6(maxLat)],
     reportedCause: null,
     aircraft,

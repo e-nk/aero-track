@@ -27,6 +27,8 @@ export interface LiveState {
   serverNow: number | null;
   aircraft: Record<string, LiveAircraft>;
   events: Record<string, BehaviourEvent>;
+  /** Flights followed worldwide, shared by every viewer (SPEC 11.11). Null until the server says. */
+  follows: FollowsData | null;
   /** Australia-wide overview (OpenSky), or null when the server has it switched off. */
   overview: {
     fetchedAt: number | null; // provider clock, epoch seconds
@@ -44,6 +46,7 @@ export const initialLiveState: LiveState = {
   serverNow: null,
   aircraft: {},
   events: {},
+  follows: null,
   overview: null,
 };
 
@@ -112,4 +115,19 @@ export function applyOverview(s: LiveState, data: OverviewData, receivedAtMs: nu
     aircraft[a.hex] = a;
   }
   return { ...s, overview: { fetchedAt: data.fetchedAt, feedStatus: data.feedStatus, receivedAtMs, aircraft } };
+}
+
+export interface FollowEntry {
+  hex: string;
+  addedAt: number;
+  landedAt: number | null;
+}
+
+export interface FollowsData {
+  max: number;
+  follows: FollowEntry[];
+}
+
+export function applyFollows(s: LiveState, data: FollowsData): LiveState {
+  return { ...s, follows: data };
 }

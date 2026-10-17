@@ -1,5 +1,5 @@
 import type { BehaviourEvent, FeedStatus } from "@aerotrack/shared";
-import type { Connection, OverviewData, SnapshotData } from "./liveState";
+import type { Connection, FollowsData, OverviewData, SnapshotData } from "./liveState";
 
 export interface LiveHandlers {
   onConnection: (c: Connection) => void;
@@ -8,6 +8,7 @@ export interface LiveHandlers {
   onEventUpsert: (e: BehaviourEvent) => void;
   onEventClose: (data: { id: string; hex: string; closedAt: number | null }) => void;
   onOverview: (data: OverviewData) => void;
+  onFollows: (data: FollowsData) => void;
 }
 
 const MAX_RETRY_MS = 30_000;
@@ -52,6 +53,7 @@ export function connectLive(url: string, h: LiveHandlers): () => void {
     on("event_update", h.onEventUpsert);
     on("event_close", h.onEventClose);
     on("overview", h.onOverview);
+    on("follows", h.onFollows);
   }
 
   open();

@@ -84,11 +84,6 @@ export default function AircraftMap() {
   const onLoad = useCallback(async () => {
     const map = mapRef.current?.getMap();
     if (!map) return;
-    // The basemap style references a few sprite icons its sprite sheet lacks
-    // (e.g. "circle-11"). Give them a blank image instead of console warnings.
-    map.on("styleimagemissing", ({ id }) => {
-      if (!map.hasImage(id)) map.addImage(id, { width: 1, height: 1, data: new Uint8Array(4) });
-    });
     await addAircraftIcons(map);
     setIconsReady(true);
   }, []);
@@ -103,10 +98,13 @@ export default function AircraftMap() {
       if (t - last >= THRESHOLDS.display.sourceUpdateMs) {
         last = t;
         const map = mapRef.current?.getMap();
-        const { aircraft, overview } = useAircraftStore.getState();
+        const { aircraft, overview, follows } = useAircraftStore.getState();
         const live = Object.values(aircraft);
         const now = Date.now();
-        (map?.getSource(AIRCRAFT_SOURCE) as GeoJSONSource | undefined)?.setData(buildAircraftFeatures(live, now, THRESHOLDS.display));
+        const followed = new Set(follows?.follows.map((f) => f.hex));
+        (map?.getSource(AIRCRAFT_SOURCE) as GeoJSONSource | undefined)?.setData(
+          buildAircraftFeatures(live, now, THRESHOLDS.display, followed),
+        );
         if (overview) {
           const skip = new Set(live.map((a) => a.hex));
           (map?.getSource(OVERVIEW_SOURCE) as GeoJSONSource | undefined)?.setData(
@@ -119,6 +117,25 @@ export default function AircraftMap() {
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [iconsReady]);
+
+  // The basemap style references a few sprite icons its sprite sheet lacks
+  // (e.g. "circle-11"). Register as soon as the map exists, before the style asks.
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    map?.setMissingStyleImageResolver((id) => {
+      if (!map.hasImage(id)) map.addImage(id, { width: 1, height: 1, data: new Uint8Array(4) });
+    });
+  }, []);
+
+  // Fly to an aircraft chosen from the Following list.
+  const focus = useAircraftStore((s) => s.focus);
+  useEffect(() => {
+    if (!focus) return;
+    const { aircraft, overview } = useAircraftStore.getState();
+    const a = aircraft[focus.hex] ?? overview?.aircraft[focus.hex];
+    const map = mapRef.current?.getMap();
+    if (a && map) map.flyTo({ center: [a.lon, a.lat], zoom: Math.max(map.getZoom(), 6), duration: 1200 });
+  }, [focus]);
 
   return (
     <Map

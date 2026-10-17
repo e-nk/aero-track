@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app";
 import { AircraftStore } from "../src/buffer";
 import type { PollerStatus } from "../src/poller";
+import { FollowList } from "../src/follows";
 import { SightingTracker } from "../src/sightings";
 import { SseHub } from "../src/sse";
 import { FakeRepo } from "./fakeRepo";
@@ -15,11 +16,14 @@ function setup(status: PollerStatus = { feedStatus: "ok", lastPollAt: T0 * 1000,
   const lifecycle = new EventLifecycle({ thresholds: THRESHOLDS, mode: "live", newId: () => "ev-1" });
   let now = T0;
   const sightings = new SightingTracker({ keepSec: THRESHOLDS.buffer.keepSec, newId: () => "open-sighting" });
+  const follows = new FollowList({ ...THRESHOLDS.follow, maxFollowed: 2 });
+  const hub = new SseHub(THRESHOLDS.sse);
   const app = buildApp({
     store,
     lifecycle,
     repo,
-    hub: new SseHub(THRESHOLDS.sse),
+    hub,
+    follows,
     sightings,
     overview: null,
     status: () => status,
@@ -27,7 +31,7 @@ function setup(status: PollerStatus = { feedStatus: "ok", lastPollAt: T0 * 1000,
     corsOrigin: ["http://localhost:3000"],
     logger: false,
   });
-  return { app, store, repo, lifecycle, sightings, setNow: (t: number) => (now = t) };
+  return { app, store, repo, lifecycle, sightings, follows, hub, setNow: (t: number) => (now = t) };
 }
 
 let close: (() => Promise<unknown>) | undefined;
@@ -157,6 +161,50 @@ describe("api routes", () => {
     const { app } = setup();
     close = () => app.close();
     expect((await app.inject("/api/aircraft/7cffff/track")).statusCode).toBe(404);
+  });
+
+  it("follows: add, list, refuse when full, remove", async () => {
+    const { app } = setup();
+    close = () => app.close();
+    expect((await app.inject("/api/follows")).json()).toEqual({ max: 2, follows: [] });
+
+    const added = await app.inject({ method: "POST", url: "/api/follows/7C0001" });
+    expect(added.statusCode).toBe(201);
+    expect(added.json()).toEqual({ result: "added", max: 2, follows: [{ hex: "7c0001", addedAt: T0, landedAt: null }] });
+    expect((await app.inject({ method: "POST", url: "/api/follows/7c0001" })).json().result).toBe("exists");
+
+    await app.inject({ method: "POST", url: "/api/follows/7c0002" });
+    const full = await app.inject({ method: "POST", url: "/api/follows/7c0003" });
+    expect(full.statusCode).toBe(409);
+    expect(full.json().message).toBe("Following is full right now (2 flights). Try again later.");
+
+    expect((await app.inject({ method: "POST", url: "/api/follows/nothex" })).statusCode).toBe(400);
+    expect((await app.inject({ method: "DELETE", url: "/api/follows/7c0001" })).statusCode).toBe(204);
+    expect((await app.inject({ method: "DELETE", url: "/api/follows/7c0001" })).statusCode).toBe(404);
+    expect((await app.inject("/api/follows")).json().follows.map((f: { hex: string }) => f.hex)).toEqual(["7c0002"]);
+  });
+
+  it("follows: tells every viewer when the list changes", async () => {
+    const { app, hub } = setup();
+    close = () => app.close();
+    const sent: [string, unknown][] = [];
+    hub.broadcast = (event: string, data: unknown) => void sent.push([event, data]);
+    await app.inject({ method: "POST", url: "/api/follows/7c0001" });
+    await app.inject({ method: "DELETE", url: "/api/follows/7c0001" });
+    expect(sent.map(([e]) => e)).toEqual(["follows", "follows"]);
+    expect(sent[1]![1]).toEqual({ max: 2, follows: [] });
+  });
+
+  it("allows POST and DELETE from the configured origin (CORS preflight)", async () => {
+    const { app } = setup();
+    close = () => app.close();
+    const res = await app.inject({
+      method: "OPTIONS",
+      url: "/api/follows/7c0001",
+      headers: { origin: "http://localhost:3000", "access-control-request-method": "POST" },
+    });
+    expect(res.headers["access-control-allow-methods"]).toMatch(/POST/);
+    expect(res.headers["access-control-allow-methods"]).toMatch(/DELETE/);
   });
 
   it("allows the configured CORS origin only", async () => {

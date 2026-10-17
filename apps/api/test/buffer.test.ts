@@ -60,6 +60,15 @@ describe("AircraftStore", () => {
     expect(store.all().map((s) => s.hex)).toEqual(["7c0002"]);
   });
 
+  it("prune keeps followed aircraft and their last position, however long the gap", () => {
+    const store = new AircraftStore(THRESHOLDS);
+    store.ingest([state("7c0001", obs(T0)), state("7c0002", obs(T0))]);
+    store.ingest([state("7c0001", obs(T0 + 7))]);
+    expect(store.prune(T0 + 5 * 3600, new Set(["7c0001"]))).toEqual(["7c0002"]);
+    expect(store.get("7c0001")?.lastPosTs).toBe(T0 + 7);
+    expect(store.track("7c0001")).toEqual([obs(T0 + 7)]);
+  });
+
   it("hydrate loads tracks and states, then ingest continues from them", () => {
     const store = new AircraftStore(THRESHOLDS);
     store.hydrate([state("7c0001", obs(T0 + 7))], new Map([["7c0001", [obs(T0), obs(T0 + 7)]]]));

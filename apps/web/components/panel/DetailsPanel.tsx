@@ -15,6 +15,7 @@ import {
 import { openEventsFor } from "../../lib/liveState";
 import { useNow } from "../../lib/useNow";
 import { useAircraftStore } from "../../store/aircraftStore";
+import { FollowButton } from "../follow/FollowButton";
 import { AircraftPhoto } from "./AircraftPhoto";
 import { EventCard } from "./EventCard";
 
@@ -60,6 +61,7 @@ export function DetailsPanel() {
   const selection = useAircraftStore((s) => s.selection);
   const events = useAircraftStore((s) => s.events);
   const overview = useAircraftStore((s) => s.overview);
+  const followed = useAircraftStore((s) => !!hex && !!s.follows?.follows.some((f) => f.hex === hex));
   const select = useAircraftStore((s) => s.select);
   const now = useNow();
 
@@ -80,6 +82,7 @@ export function DetailsPanel() {
       <aside aria-label="Aircraft details" className={PANEL_CLASS}>
         <PanelHeader title={ov.callsign ?? "Callsign not available"} subtitle={`Australia-wide data · ${hex}`} onClose={() => select(null)} />
         <AircraftPhoto hex={hex} registration={null} />
+        <FollowButton hex={hex} />
         <section aria-labelledby="ov-now-h" className="mb-5">
           <h3 id="ov-now-h" className="mb-1 text-xs uppercase tracking-wide text-muted">
             Now
@@ -119,6 +122,14 @@ export function DetailsPanel() {
       ) : (
         <>
           <AircraftPhoto hex={hex} registration={state?.registration ?? null} />
+          <FollowButton hex={hex} />
+          {followed && (
+            <p className="mb-4 text-xs leading-snug text-muted">
+              Following this flight worldwide, updated about every 30 seconds wherever ADSB.lol has receivers. There&apos;s
+              usually no receiver coverage over the ocean, so it can disappear for hours; the last known position is shown.
+              We only show where it landed once we see it land.
+            </p>
+          )}
 
           <section aria-labelledby="identity-h" className="mb-4">
             <h3 id="identity-h" className="sr-only">

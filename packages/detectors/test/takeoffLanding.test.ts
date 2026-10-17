@@ -94,3 +94,21 @@ describe("detectTakeoffLanding: several transitions", () => {
     expect(takeoff.evidence.at).toBe(again.find((o) => !o.onGround)!.t);
   });
 });
+
+describe("detectTakeoffLanding: airport list from the context", () => {
+  it("uses ctx.airports when given, e.g. the server's worldwide list", () => {
+    const LAX = { ident: "KLAX", name: "Los Angeles International Airport", lat: 33.942501, lon: -118.407997, elevationFt: 125 };
+    const track = fly([{ sec: 42, onGround: true }, { sec: 42, climbFpm: 2000 }], {
+      lat: LAX.lat,
+      lon: LAX.lon,
+      altFt: 0,
+      onGround: true,
+      gsKt: 150,
+    });
+    const [takeoff] = detectTakeoffLanding(track, ctxFor(track, { airports: [LAX] }));
+    expect(takeoff!.evidence).toMatchObject({ airport: "KLAX", airportName: "Los Angeles International Airport" });
+    // Without it, only the Sydney-region list is known.
+    expect(detectTakeoffLanding(track, ctxFor(track))[0]!.evidence.airport).toBeUndefined();
+  });
+});
+

@@ -1,15 +1,19 @@
 import { runAll, type EventLifecycle, type LifecycleChanges } from "@aerotrack/detectors";
-import type { Thresholds } from "@aerotrack/shared";
+import type { Airport, Thresholds } from "@aerotrack/shared";
 import type { AircraftStore } from "./buffer";
 
 export interface EventEngineDeps {
   store: AircraftStore;
   lifecycle: EventLifecycle;
   thresholds: Thresholds;
+  /** Airports for take-off/landing and "last seen near"; defaults to the Sydney list. */
+  airports?: readonly Airport[];
+  /** Followed aircraft: never dropped from the buffer (SPEC 11.11). */
+  keepHexes?: () => ReadonlySet<string>;
 }
 
 /** Runs detectors for every buffered aircraft and applies the event lifecycle (SPEC 11.3). */
-export function createEventEngine({ store, lifecycle, thresholds }: EventEngineDeps) {
+export function createEventEngine({ store, lifecycle, thresholds, airports, keepHexes }: EventEngineDeps) {
   return {
     evaluate(nowSec: number): LifecycleChanges {
       const changes: LifecycleChanges = { opened: [], updated: [], closed: [] };
@@ -20,7 +24,7 @@ export function createEventEngine({ store, lifecycle, thresholds }: EventEngineD
       };
 
       // Aircraft gone for keepSec leave the buffer; their events close.
-      for (const hex of store.prune(nowSec)) merge(lifecycle.closeAll(hex, nowSec));
+      for (const hex of store.prune(nowSec, keepHexes?.())) merge(lifecycle.closeAll(hex, nowSec));
 
       // Includes aircraft missing from this poll, so signal loss is detected.
       for (const s of store.all()) {
@@ -30,6 +34,7 @@ export function createEventEngine({ store, lifecycle, thresholds }: EventEngineD
           squawk: s.squawk,
           emergency: s.emergency,
           thresholds,
+          airports,
         });
         merge(lifecycle.step(s.hex, detections, nowSec));
       }

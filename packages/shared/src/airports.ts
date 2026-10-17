@@ -126,8 +126,8 @@ export const AIRPORTS: readonly Airport[] = [
   {
     "ident": "YTLG",
     "name": "Taralga Grathawa Airport",
-    "lat": -34.28919982910156,
-    "lon": 149.78199768066406,
+    "lat": -34.2892,
+    "lon": 149.781998,
     "elevationFt": 3031
   },
   {

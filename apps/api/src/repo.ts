@@ -1,5 +1,6 @@
 import type { AircraftState, BehaviourEvent, DataMode } from "@aerotrack/shared";
 import type { NewObservation } from "./buffer";
+import type { FollowEntry } from "./follows";
 import type { Sighting } from "./sightings";
 
 export interface PositionRow extends NewObservation {
@@ -25,6 +26,9 @@ export interface Repo {
   loadOpenSightings(sinceSec: number): Promise<Sighting[]>;
   /** All-time count and first sighting for one aircraft, plus ids of sightings started since sinceSec. */
   sightingSummary(hex: string, sinceSec: number): Promise<SightingSummary>;
+  /** Replace the saved follow list. */
+  saveFollows(list: FollowEntry[]): Promise<void>;
+  loadFollows(): Promise<FollowEntry[]>;
 }
 
 export interface SightingSummary {

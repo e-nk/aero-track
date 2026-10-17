@@ -39,7 +39,7 @@ describe.skipIf(!url)("Postgres repo", () => {
     await runMigrations(url!);
   });
   beforeEach(async () => {
-    await db.execute(sql`truncate positions, aircraft, events, recordings, sightings restart identity`);
+    await db.execute(sql`truncate positions, aircraft, events, recordings, sightings, follows restart identity`);
   });
   afterAll(async () => {
     await close();
@@ -142,6 +142,17 @@ describe.skipIf(!url)("Postgres repo", () => {
     const open = sighting("6b1f8c2e-0000-4000-8000-0000000000c1", T0, { lastSeenAt: T0 + 600, landedAt: T0 + 500, landingAirport: "YSBK" });
     await repo.upsertSightings([open, sighting("6b1f8c2e-0000-4000-8000-0000000000c2", T0 - 5000, { lastSeenAt: T0 - 4000 })]);
     expect(await repo.loadOpenSightings(T0)).toEqual([open]);
+  });
+
+  it("saves the follow list, replacing what was there", async () => {
+    await repo.saveFollows([
+      { hex: "7c0001", addedAt: T0, landedAt: null },
+      { hex: "7c0002", addedAt: T0 + 1.5, landedAt: T0 + 600 },
+    ]);
+    await repo.saveFollows([{ hex: "7c0002", addedAt: T0 + 1.5, landedAt: T0 + 600 }]);
+    expect(await repo.loadFollows()).toEqual([{ hex: "7c0002", addedAt: T0 + 1.5, landedAt: T0 + 600 }]);
+    await repo.saveFollows([]);
+    expect(await repo.loadFollows()).toEqual([]);
   });
 
   it("accepts empty batches", async () => {

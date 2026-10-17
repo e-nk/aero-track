@@ -9,6 +9,7 @@ import {
   type OverviewCompact,
 } from "@aerotrack/shared";
 import type { AircraftStore } from "./buffer";
+import type { FollowEntry, FollowList } from "./follows";
 import type { OverviewStore } from "./overview/overviewStore";
 import type { PollerStatus } from "./poller";
 
@@ -32,7 +33,13 @@ export type StreamMessage =
   | ["status", { feedStatus: FeedStatus; lastPollAt: number | null }]
   | ["event_open" | "event_update", BehaviourEvent]
   | ["event_close", { id: string; hex: string; closedAt: number | null }]
-  | ["overview", OverviewData];
+  | ["overview", OverviewData]
+  | ["follows", FollowsData];
+
+export interface FollowsData {
+  max: number;
+  follows: FollowEntry[];
+}
 
 export function snapshotMessage(args: {
   store: AircraftStore;
@@ -54,6 +61,10 @@ export function snapshotMessage(args: {
 
 export function overviewMessage(store: OverviewStore, feedStatus: FeedStatus): ["overview", OverviewData] {
   return ["overview", { fetchedAt: store.fetchedAt, feedStatus, aircraft: store.all().map(toOverviewCompact) }];
+}
+
+export function followsMessage(follows: FollowList): ["follows", FollowsData] {
+  return ["follows", { max: follows.max, follows: follows.list() }];
 }
 
 export function statusMessage({ feedStatus, lastPollAt }: PollerStatus): StreamMessage {

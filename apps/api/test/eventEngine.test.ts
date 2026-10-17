@@ -64,4 +64,25 @@ describe("event engine", () => {
     expect(store.get("7c0001")).toBeUndefined();
     expect(lifecycle.openEvents()).toEqual([]);
   });
+
+  it("keeps followed aircraft through long gaps instead of dropping them", () => {
+    const store = new AircraftStore(THRESHOLDS);
+    const lifecycle = new EventLifecycle({ thresholds: THRESHOLDS, mode: "live", newId: () => "ev" });
+    const engine = createEventEngine({ store, lifecycle, thresholds: THRESHOLDS, keepHexes: () => new Set(["7c0001"]) });
+    store.ingest([state("7c0001", obs(T0, { altFt: 37000 }))]);
+    const changes = engine.evaluate(T0 + 3 * 3600);
+    expect(store.get("7c0001")).toBeDefined();
+    expect(changes.opened[0]).toMatchObject({ type: "signal_lost", evidence: { secondsSinceLastPosition: 3 * 3600 } });
+  });
+
+  it("uses the airport list it is given, e.g. worldwide for followed flights", () => {
+    const LAX = { ident: "KLAX", name: "Los Angeles International Airport", lat: 33.942501, lon: -118.407997, elevationFt: 125 };
+    const store = new AircraftStore(THRESHOLDS);
+    const lifecycle = new EventLifecycle({ thresholds: THRESHOLDS, mode: "live", newId: () => "ev" });
+    const engine = createEventEngine({ store, lifecycle, thresholds: THRESHOLDS, airports: [LAX] });
+    store.ingest([state("7c0001", obs(T0, { lat: LAX.lat, lon: LAX.lon - 0.05, altFt: 1500 }))]);
+    const changes = engine.evaluate(T0 + 120);
+    expect(changes.opened[0]!.evidence).toMatchObject({ nearAirport: "KLAX" });
+  });
 });
+

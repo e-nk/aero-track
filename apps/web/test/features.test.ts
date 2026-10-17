@@ -26,6 +26,7 @@ describe("buildAircraftFeatures", () => {
       rotation: 0,
       stale: false,
       hasEvent: false,
+      followed: false,
     });
   });
 

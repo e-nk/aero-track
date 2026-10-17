@@ -41,20 +41,24 @@ export class AircraftStore {
 
   /**
    * Trim observations older than keepSec and drop aircraft whose last position
-   * is older than keepSec. Returns the dropped hexes.
+   * is older than keepSec. Returns the dropped hexes. Followed aircraft (keep)
+   * are never dropped and always keep their last position, so a flight that
+   * disappears over the ocean for hours stays on the map at its last fix.
    */
-  prune(nowSec: number): string[] {
+  prune(nowSec: number, keep: ReadonlySet<string> = new Set()): string[] {
     const cutoff = nowSec - this.thresholds.buffer.keepSec;
     const dropped: string[] = [];
     for (const [hex, s] of this.states) {
-      if (s.lastPosTs < cutoff) {
+      if (s.lastPosTs < cutoff && !keep.has(hex)) {
         this.states.delete(hex);
         this.tracks.delete(hex);
         dropped.push(hex);
         continue;
       }
       const track = this.tracks.get(hex);
-      if (track) this.tracks.set(hex, track.filter((o) => o.t >= cutoff));
+      if (!track) continue;
+      const recent = track.filter((o) => o.t >= cutoff);
+      this.tracks.set(hex, recent.length || !keep.has(hex) ? recent : track.slice(-1));
     }
     return dropped;
   }

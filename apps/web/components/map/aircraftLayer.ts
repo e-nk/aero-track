@@ -18,8 +18,15 @@ export const aircraftLayer: SymbolLayerSpecification = {
     "icon-allow-overlap": true,
     "icon-ignore-placement": true,
     "icon-size": ["interpolate", ["linear"], ["zoom"], 6, 0.55, 10, 0.8, 14, 1.1],
-    // Callsign labels once zoomed in a little; missing callsigns show nothing.
-    "text-field": ["step", ["zoom"], "", 9, ["coalesce", ["get", "callsign"], ""]],
+    // Callsign labels once zoomed in a little, and always for followed flights.
+    // (MapLibre only allows "zoom" at the top level, so the step wraps the case.)
+    "text-field": [
+      "step",
+      ["zoom"],
+      ["case", ["==", ["get", "followed"], true], ["coalesce", ["get", "callsign"], ["get", "hex"]], ""],
+      9,
+      ["coalesce", ["get", "callsign"], ["get", "hex"]],
+    ],
     "text-font": ["Noto Sans Regular"],
     "text-size": 11,
     "text-offset": [0, 1.4],

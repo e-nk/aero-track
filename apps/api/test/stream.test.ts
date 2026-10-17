@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app";
 import { AircraftStore } from "../src/buffer";
 import { OverviewStore } from "../src/overview/overviewStore";
+import { FollowList } from "../src/follows";
 import { SightingTracker } from "../src/sightings";
 import { SseHub } from "../src/sse";
 import { FakeRepo } from "./fakeRepo";
@@ -65,6 +66,7 @@ async function start(withOverview = false) {
     repo: new FakeRepo(),
     hub,
     sightings: new SightingTracker({ keepSec: THRESHOLDS.buffer.keepSec, newId: () => "s" }),
+    follows: new FollowList(THRESHOLDS.follow),
     overview: withOverview ? { store: overviewStore, status: () => ({ feedStatus: "ok", lastPollAt: T0 * 1000, consecutiveFailures: 0 }) } : null,
     status: () => ({ feedStatus: "ok", lastPollAt: T0 * 1000, consecutiveFailures: 0 }),
     nowSec: () => T0,
@@ -88,6 +90,14 @@ describe("GET /api/stream", () => {
     c.close();
   });
 
+  it("sends the followed flights on connect", async () => {
+    const { port } = await start();
+    const c = connect(port);
+    const messages = await c.waitFor(3);
+    expect(messages[2]).toEqual({ event: "follows", data: { max: THRESHOLDS.follow.maxFollowed, follows: [] } });
+    c.close();
+  });
+
   it("sends a snapshot and the feed status on connect", async () => {
     const { port } = await start();
     const c = connect(port);
@@ -101,9 +111,9 @@ describe("GET /api/stream", () => {
   it("also sends the Australia-wide overview on connect when it's enabled", async () => {
     const { port } = await start(true);
     const c = connect(port);
-    const messages = await c.waitFor(3);
-    expect(messages.map((m) => m.event)).toEqual(["snapshot", "status", "overview"]);
-    expect(messages[2]!.data).toEqual({ fetchedAt: T0, feedStatus: "ok", aircraft: [] });
+    const messages = await c.waitFor(4);
+    expect(messages.map((m) => m.event)).toEqual(["snapshot", "status", "follows", "overview"]);
+    expect(messages[3]!.data).toEqual({ fetchedAt: T0, feedStatus: "ok", aircraft: [] });
     c.close();
   });
 
@@ -111,11 +121,11 @@ describe("GET /api/stream", () => {
     const { port, hub } = await start();
     const a = connect(port);
     const b = connect(port);
-    await a.waitFor(2);
-    await b.waitFor(2);
+    await a.waitFor(3);
+    await b.waitFor(3);
     hub.broadcast("event_close", { id: "ev", hex: "7c0001", closedAt: T0 });
-    expect((await a.waitFor(3))[2]).toEqual({ event: "event_close", data: { id: "ev", hex: "7c0001", closedAt: T0 } });
-    expect((await b.waitFor(3))[2]!.event).toBe("event_close");
+    expect((await a.waitFor(4))[3]).toEqual({ event: "event_close", data: { id: "ev", hex: "7c0001", closedAt: T0 } });
+    expect((await b.waitFor(4))[3]!.event).toBe("event_close");
     a.close();
     b.close();
   });

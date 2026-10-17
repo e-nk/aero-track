@@ -98,3 +98,10 @@ export const sightings = pgTable(
   },
   (table) => [index("sightings_hex_started_at_idx").on(table.hex, table.startedAt), index("sightings_last_seen_at_idx").on(table.lastSeenAt)],
 );
+
+// Followed flights (SPEC 11.11), so a restart doesn't drop a flight mid-ocean.
+export const follows = pgTable("follows", {
+  hex: text("hex").primaryKey(),
+  addedAt: ts("added_at").notNull(),
+  landedAt: ts("landed_at"),
+});

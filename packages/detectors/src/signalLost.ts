@@ -16,7 +16,7 @@ export function detectSignalLost(track: Observation[], ctx: DetectContext): Dete
     const rate = last.baroRateFpm;
     const level = ctx.thresholds.display.levelRateFpm;
     if (rate !== null) evidence.lastVertical = rate <= -level ? "descending" : rate >= level ? "climbing" : "level";
-    const near = nearestAirport(last.lat, last.lon, ctx.thresholds.takeoffLanding.nearAirportKm);
+    const near = nearestAirport(last.lat, last.lon, ctx.thresholds.takeoffLanding.nearAirportKm, ctx.airports);
     if (near) {
       evidence.nearAirport = near.airport.ident;
       evidence.nearAirportName = near.airport.name;

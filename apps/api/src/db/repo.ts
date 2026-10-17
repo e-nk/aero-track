@@ -2,9 +2,10 @@ import type { AircraftState, BehaviourEvent, Confidence, DataMode, EventType } f
 import { and, asc, count, desc, eq, gte, inArray, min, sql } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import type { PositionRow, Repo } from "../repo";
+import type { FollowEntry } from "../follows";
 import type { Sighting } from "../sightings";
 import type { Db } from "./client";
-import { aircraft, events, positions, sightings } from "./schema";
+import { aircraft, events, follows, positions, sightings } from "./schema";
 
 // Keeps each insert well under Postgres' 65,535 bind-parameter limit.
 const CHUNK = 1000;
@@ -240,6 +241,23 @@ export function createPgRepo(db: Db): Repo {
         firstSeenAt: all?.firstSeenAt ? toSec(new Date(all.firstSeenAt)) : null,
         recentIds: recent.map((r) => r.id),
       };
+    },
+
+    async saveFollows(list: FollowEntry[]) {
+      // Tiny table (at most follow.maxFollowed rows): replace it in one transaction.
+      await db.transaction(async (tx) => {
+        await tx.delete(follows);
+        if (list.length) {
+          await tx.insert(follows).values(
+            list.map((f) => ({ hex: f.hex, addedAt: toDate(f.addedAt), landedAt: optDate(f.landedAt) })),
+          );
+        }
+      });
+    },
+
+    async loadFollows() {
+      const rows = await db.select().from(follows);
+      return rows.map((r) => ({ hex: r.hex, addedAt: toSec(r.addedAt), landedAt: r.landedAt ? toSec(r.landedAt) : null }));
     },
 
     async recentEvents(hex: string, limit: number) {

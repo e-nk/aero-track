@@ -55,7 +55,7 @@ function build(
   ctx: DetectContext,
   extra: Detection["evidence"],
 ): Detection {
-  const near = nearestAirport(at.lat, at.lon, ctx.thresholds.takeoffLanding.airportRadiusKm);
+  const near = nearestAirport(at.lat, at.lon, ctx.thresholds.takeoffLanding.airportRadiusKm, ctx.airports);
   return {
     type,
     confidence: "observed",

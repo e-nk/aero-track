@@ -656,6 +656,7 @@ events: id (uuid pk), hex, type, confidence, status, mode, window_start, window_
         evidence (jsonb), explanation (jsonb), explanation_source, opened_at, updated_at, closed_at
         index (hex, opened_at), index (status)
 recordings: id (text pk), title, source, attribution, captured_from, captured_to, file_url, reported_cause (jsonb null), created_at
+follows: hex (text pk), added_at, landed_at (null)    -- the shared follow list, saved on every change (11.11)
 sightings: id (uuid pk), hex, started_at, last_seen_at, took_off_at (null), takeoff_airport (null), landed_at (null), landing_airport (null)
            index (hex, started_at)
 ```
@@ -682,6 +683,10 @@ sightings: id (uuid pk), hex, started_at, last_seen_at, took_off_at (null), take
 - Followed aircraft get the full pipeline outside the Sydney circle: buffer, detectors, events, sightings, positions in Postgres. Inside the circle the main poll already covers them.
 - Take-off/landing worldwide uses a global airport list (OurAirports large and medium airports with an IATA code) kept on the server and passed to detectors through `DetectContext.airports`; detectors default to the Sydney list (the browser bundle stays small).
 - A follow ends automatically `follow.afterLandingSec` (15 min) after an observed landing, or after `follow.maxAgeSec` (24 h).
+- The list is saved to Postgres (`follows`) on every change and reloaded at startup, so a restart or deploy never drops a flight mid-ocean. SSE `follows` message `{ max, follows }` on connect and on change.
+- Followed aircraft are never dropped from the buffer (`AircraftStore.prune` keep set); they keep their last position however long the gap.
+- Web: "Follow this flight" / "Following · Stop following" in the details panel (also for overview aircraft); a "Following" row of chips under the badges selects a flight and flies the map to it; followed aircraft are labelled at every zoom.
+- Worldwide airports: `pnpm build:airports --world` writes `apps/api/src/data/worldAirports.ts` (4,568 large and medium airports with an IATA code), merged with the Sydney list on the server.
 - Honesty: no destination until a landing is observed ("Landed near {airport} at {time}"). Over the ocean there is usually no receiver coverage, so the aircraft can vanish for hours; the panel says "There's usually no receiver coverage over the ocean. The last known position is shown." The map never draws a path through missing data.
 
 ### 11.7 HTTP API

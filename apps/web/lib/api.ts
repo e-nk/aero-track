@@ -14,6 +14,26 @@ export interface AircraftDetail {
 
 const url = (path: string) => `${API_URL}${path}`;
 
+export type FollowResult = { ok: true } | { ok: false; message: string };
+
+const UNREACHABLE = "Couldn't reach AeroTrack. Please try again.";
+
+async function followRequest(method: "POST" | "DELETE", hex: string, doFetch: typeof fetch): Promise<FollowResult> {
+  try {
+    const res = await doFetch(url(`/api/follows/${encodeURIComponent(hex)}`), { method });
+    if (res.ok) return { ok: true };
+    const body = (await res.json().catch(() => null)) as { message?: unknown } | null;
+    return { ok: false, message: typeof body?.message === "string" ? body.message : UNREACHABLE };
+  } catch {
+    return { ok: false, message: UNREACHABLE };
+  }
+}
+
+/** POST /api/follows/:hex (SPEC 11.11). */
+export const followFlight = (hex: string, doFetch: typeof fetch = fetch) => followRequest("POST", hex, doFetch);
+/** DELETE /api/follows/:hex. */
+export const unfollowFlight = (hex: string, doFetch: typeof fetch = fetch) => followRequest("DELETE", hex, doFetch);
+
 /** GET /api/aircraft/:hex. "not_found" when the server can't see the aircraft. */
 export async function fetchDetail(hex: string, signal?: AbortSignal): Promise<AircraftDetail | "not_found"> {
   const res = await fetch(url(`/api/aircraft/${encodeURIComponent(hex)}`), { signal });

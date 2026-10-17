@@ -12,6 +12,7 @@ export interface AircraftFeatureProps {
   stale: boolean;
   hasEvent: boolean;
   source?: "live" | "overview";
+  followed?: boolean;
 }
 
 export interface AircraftFeatureCollection {
@@ -29,6 +30,7 @@ export function buildAircraftFeatures(
   aircraft: LiveAircraft[],
   nowMs: number,
   display: Thresholds["display"],
+  followed: ReadonlySet<string> = new Set(),
 ): AircraftFeatureCollection {
   return {
     type: "FeatureCollection",
@@ -48,6 +50,7 @@ export function buildAircraftFeatures(
           rotation: a.trackDeg ?? 0,
           stale: ageSec > display.staleAfterSec,
           hasEvent: a.hasOpenEvent,
+          followed: followed.has(a.hex),
         },
       };
     }),

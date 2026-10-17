@@ -5,6 +5,7 @@ import {
   applyEventClose,
   applyEventUpsert,
   applyEventsSeed,
+  applyFollows,
   applyOverview,
   applySnapshot,
   applyStatus,
@@ -27,6 +28,9 @@ interface AircraftStore extends LiveState {
   selectedHex: string | null;
   selection: Selection;
   select: (hex: string | null) => void;
+  /** Select an aircraft and ask the map to fly to it (e.g. from the Following list). */
+  focus: { hex: string; at: number } | null;
+  focusOn: (hex: string) => void;
   setSelection: (hex: string, patch: Partial<Selection>) => void;
   seedEvents: (detail: AircraftDetail) => void;
   reset: () => void;
@@ -42,14 +46,17 @@ export const useAircraftStore = create<AircraftStore>()((set) => ({
     onEventUpsert: (e) => set((s) => applyEventUpsert(s, e)),
     onEventClose: (data) => set((s) => applyEventClose(s, data)),
     onOverview: (data) => set((s) => applyOverview(s, data, Date.now())),
+    onFollows: (data) => set((s) => applyFollows(s, data)),
   },
   selectedHex: null,
   selection: EMPTY_SELECTION,
   select: (hex) => set({ selectedHex: hex, selection: EMPTY_SELECTION }),
+  focus: null,
+  focusOn: (hex) => set({ selectedHex: hex, selection: EMPTY_SELECTION, focus: { hex, at: Date.now() } }),
   // Ignore late responses for an aircraft that is no longer selected.
   setSelection: (hex, patch) =>
     set((s) => (s.selectedHex === hex ? { selection: { ...s.selection, ...patch } } : {})),
   seedEvents: (detail) => set((s) => applyEventsSeed(s, detail.state.hex, detail.openEvents)),
   // Switching mode clears the map and store (SPEC 12.1).
-  reset: () => set({ ...initialLiveState, selectedHex: null, selection: EMPTY_SELECTION }),
+  reset: () => set({ ...initialLiveState, selectedHex: null, selection: EMPTY_SELECTION, focus: null }),
 }));

@@ -1,13 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { EventLifecycle } from "@aerotrack/detectors";
-import { THRESHOLDS } from "@aerotrack/shared";
+import { AIRPORTS, THRESHOLDS, type Airport } from "@aerotrack/shared";
 import { buildApp } from "./app";
 import { AircraftStore } from "./buffer";
+import { WORLD_AIRPORTS } from "./data/worldAirports";
 import { createDb } from "./db/client";
 import { createPgRepo } from "./db/repo";
 import { loadDotEnv, loadEnv } from "./env";
 import { createEventEngine } from "./eventEngine";
+import { FollowList } from "./follows";
 import { hydrate } from "./hydrate";
+import type { ParsedResponse } from "./providers/adsblol/schema";
 import { createPipeline } from "./pipeline";
 import { createPoller } from "./poller";
 import { ProviderError, createAdsbLolClient } from "./providers/adsblol/client";
@@ -16,7 +19,7 @@ import { adaptStates } from "./providers/opensky/adapter";
 import { createOpenSkyClient, createTokenProvider } from "./providers/opensky/client";
 import { SightingTracker } from "./sightings";
 import { SseHub } from "./sse";
-import { changeMessages, overviewMessage, snapshotMessage, statusMessage } from "./streamMessages";
+import { changeMessages, followsMessage, overviewMessage, snapshotMessage, statusMessage } from "./streamMessages";
 import { createWriter } from "./writer";
 
 loadDotEnv();
@@ -26,7 +29,17 @@ const { db, close: closeDb } = createDb(env.DATABASE_URL);
 const repo = createPgRepo(db);
 const store = new AircraftStore(THRESHOLDS);
 const lifecycle = new EventLifecycle({ thresholds: THRESHOLDS, mode: "live", newId: randomUUID });
-const engine = createEventEngine({ store, lifecycle, thresholds: THRESHOLDS });
+// Followed flights (SPEC 11.11): shared list, kept in the buffer through long gaps.
+const follows = new FollowList(THRESHOLDS.follow, await repo.loadFollows());
+// Sydney-region airports (incl. small fields) first, then the worldwide list for followed flights.
+const airports: Airport[] = [...new Map([...AIRPORTS, ...WORLD_AIRPORTS].map((a) => [a.ident, a])).values()];
+const engine = createEventEngine({
+  store,
+  lifecycle,
+  thresholds: THRESHOLDS,
+  airports,
+  keepHexes: () => new Set(follows.hexes()),
+});
 const hub = new SseHub(THRESHOLDS.sse);
 // Continue sightings still open before a restart (same window as the buffer).
 const sightings = new SightingTracker({
@@ -39,28 +52,40 @@ const sightings = new SightingTracker({
 let lastPollNow: number | null = null;
 const nowSec = () => lastPollNow ?? Date.now() / 1000;
 
+const saveFollows = () =>
+  repo.saveFollows(follows.list()).catch((err: unknown) => app.log.error({ err }, "Could not save the follow list"));
+const broadcastFollows = () => {
+  hub.broadcast(...followsMessage(follows));
+  void saveFollows();
+};
+
+/** One successful adsb.lol response (Sydney poll or followed flights): detect, persist, broadcast. */
+function handlePoll(parsed: ParsedResponse, label: string) {
+  const result = pipeline.handle(parsed);
+  lastPollNow = result.now;
+  for (const [event, data] of changeMessages(result.changes)) hub.broadcast(event, data);
+  const [event, data] = snapshotMessage({ store, lifecycle, feedStatus: poller.status().feedStatus, now: result.now });
+  hub.broadcast(event, data);
+  if (follows.applyEvents([...result.changes.opened, ...result.changes.updated])) broadcastFollows();
+  const { opened, updated, closed } = result.changes;
+  app.log.debug(
+    {
+      aircraft: result.aircraftCount,
+      newPositions: result.newPositions,
+      skipped: result.skipped,
+      events: { opened: opened.length, updated: updated.length, closed: closed.length },
+      streamClients: hub.size,
+    },
+    label,
+  );
+}
+
 const poller = createPoller({
   intervalMs: env.POLL_INTERVAL_MS,
   maxBackoffMs: THRESHOLDS.poll.maxBackoffMs,
   downAfterFailures: THRESHOLDS.poll.downAfterFailures,
   run: async () => {
-    const parsed = await client.fetchPoint({ ...THRESHOLDS.poll.centre, radiusNm: THRESHOLDS.poll.radiusNm });
-    const result = pipeline.handle(parsed);
-    lastPollNow = result.now;
-    for (const [event, data] of changeMessages(result.changes)) hub.broadcast(event, data);
-    const [event, data] = snapshotMessage({ store, lifecycle, feedStatus: "ok", now: result.now });
-    hub.broadcast(event, data);
-    const { opened, updated, closed } = result.changes;
-    app.log.debug(
-      {
-        aircraft: result.aircraftCount,
-        newPositions: result.newPositions,
-        skipped: result.skipped,
-        events: { opened: opened.length, updated: updated.length, closed: closed.length },
-        streamClients: hub.size,
-      },
-      "Poll ok",
-    );
+    handlePoll(await client.fetchPoint({ ...THRESHOLDS.poll.centre, radiusNm: THRESHOLDS.poll.radiusNm }), "Poll ok");
   },
   onError: (err, consecutiveFailures) => {
     const detail = err instanceof ProviderError ? { kind: err.kind, status: err.status, message: err.message } : { err };
@@ -70,6 +95,22 @@ const poller = createPoller({
     app.log.info({ feedStatus: status.feedStatus }, "Feed status changed");
     const [event, data] = statusMessage(status);
     hub.broadcast(event, data);
+  },
+});
+
+// Followed flights, worldwide: one adsb.lol request for all of them (SPEC 11.11).
+const followPoller = createPoller({
+  intervalMs: THRESHOLDS.follow.intervalMs,
+  maxBackoffMs: THRESHOLDS.poll.maxBackoffMs,
+  downAfterFailures: THRESHOLDS.poll.downAfterFailures,
+  run: async () => {
+    if (follows.expire(nowSec()).length) broadcastFollows();
+    const hexes = follows.hexes();
+    if (hexes.length) handlePoll(await client.fetchHexes(hexes), "Follow poll ok");
+  },
+  onError: (err, consecutiveFailures) => {
+    const detail = err instanceof ProviderError ? { kind: err.kind, status: err.status, message: err.message } : { err };
+    app.log.warn({ ...detail, consecutiveFailures }, "Follow poll failed; keeping last known positions");
   },
 });
 
@@ -119,6 +160,8 @@ const app = buildApp({
   repo,
   hub,
   sightings,
+  follows,
+  onFollowsChanged: () => void saveFollows(),
   overview: overviewPoller ? { store: overviewStore, status: overviewPoller.status } : null,
   status: poller.status,
   nowSec,
@@ -145,6 +188,7 @@ await app.listen({ port: env.PORT, host: env.HOST });
 writer.start();
 hub.start();
 poller.start();
+followPoller.start();
 if (overviewPoller) overviewPoller.start();
 else app.log.info("OpenSky credentials not set; Australia-wide overview is off");
 
@@ -154,6 +198,7 @@ async function shutdown(signal: string) {
   shuttingDown = true;
   app.log.info({ signal }, "Shutting down");
   await poller.stop();
+  await followPoller.stop();
   await overviewPoller?.stop();
   hub.stop();
   await writer.stop();

@@ -51,6 +51,14 @@ describe("adsb.lol client", () => {
     expect(res.now).toBe(1792219219500);
   });
 
+  it("looks up several aircraft in one request", async () => {
+    const calls: Call[] = [];
+    await client(fakeFetch(() => json(loadSample()), calls)).fetchHexes(["7cb05c", "~2a0b1c", "c827f0"]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("https://api.adsb.lol/v2/hex/7cb05c,~2a0b1c,c827f0");
+    expect(calls[0]!.headers.get("user-agent")).toBe(UA);
+  });
+
   it("refuses to start without a User-Agent", () => {
     expect(() => createAdsbLolClient({ baseUrl: "https://api.adsb.lol", userAgent: " " })).toThrow();
   });

@@ -33,3 +33,7 @@ body {
 .maplibregl-map .maplibregl-ctrl-top-left {
   top: 3.25rem;
 }
+/* With the Following row showing, the header is taller. */
+.has-follows .maplibregl-map .maplibregl-ctrl-top-left {
+  top: 5.5rem;
+}

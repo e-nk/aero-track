@@ -1,5 +1,6 @@
 import type { AircraftState, BehaviourEvent } from "@aerotrack/shared";
 import type { PositionRow, Repo } from "../src/repo";
+import type { FollowEntry } from "../src/follows";
 import type { Sighting } from "../src/sightings";
 
 /** In-memory Repo for unit tests. */
@@ -8,6 +9,7 @@ export class FakeRepo implements Repo {
   aircraft = new Map<string, AircraftState>();
   events = new Map<string, BehaviourEvent>();
   sightings = new Map<string, Sighting>();
+  follows: FollowEntry[] = [];
   calls: string[] = [];
   failNext = 0;
 
@@ -45,6 +47,13 @@ export class FakeRepo implements Repo {
       firstSeenAt: mine.length ? Math.min(...mine.map((s) => s.startedAt)) : null,
       recentIds: mine.filter((s) => s.startedAt >= sinceSec).map((s) => s.id),
     };
+  }
+  async saveFollows(list: FollowEntry[]) {
+    this.maybeFail("saveFollows");
+    this.follows = list.map((f) => ({ ...f }));
+  }
+  async loadFollows() {
+    return this.follows.map((f) => ({ ...f }));
   }
   async loadPositionsSince(sinceSec: number) {
     return this.positions.filter((p) => p.obs.t >= sinceSec).sort((a, b) => a.obs.t - b.obs.t);

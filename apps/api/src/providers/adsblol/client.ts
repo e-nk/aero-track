@@ -55,6 +55,8 @@ export function createAdsbLolClient(opts: AdsbLolClientOptions) {
 
   return {
     fetchPoint: ({ lat, lon, radiusNm }: PointQuery) => get(`/v2/point/${lat}/${lon}/${radiusNm}`),
+    /** Several aircraft, worldwide, in one request (verified 2026-10-17). */
+    fetchHexes: (hexes: string[]) => get(`/v2/hex/${hexes.join(",")}`),
   };
 }
 

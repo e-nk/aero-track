@@ -81,6 +81,17 @@ describe("ReplayEngine", () => {
     expect(e.openEvents().map((ev) => ev.type)).toEqual(fresh.openEvents().map((ev) => ev.type));
   });
 
+  it("remembers ended events for the timeline", () => {
+    const e = new ReplayEngine(recording(), THRESHOLDS);
+    e.advanceTo(T0 + 100 + 70 + 70); // 7c0002's climb has ended and its signal is lost
+    e.advanceTo(T0 + 600);
+    const ended = e.recentEvents("7c0002");
+    expect(ended.length).toBeGreaterThan(0);
+    expect(ended.every((ev) => ev.status === "closed" && ev.hex === "7c0002")).toBe(true);
+    e.seek(T0 + 10);
+    expect(e.recentEvents("7c0002")).toEqual([]);
+  });
+
   it("gives identity and the recent track for the panel", () => {
     const e = new ReplayEngine(recording(), THRESHOLDS);
     e.advanceTo(T0 + 30);

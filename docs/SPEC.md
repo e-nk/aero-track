@@ -558,6 +558,7 @@ export const dHeading = (a: number, b: number) => ((b - a + 540) % 360) - 180; /
 - "How we know" then reads e.g. "Last seen about 8 km from Sydney Kingsford Smith International Airport, descending." It never says the aircraft landed.
 - Confidence: `fact`.
 - Closes automatically when a fresh position arrives.
+- While the signal is lost, behaviour detectors (climb/descent, turn, circling, rapid descent) don't run: the frozen track describes the past, not what the aircraft is doing now. Their events close after `lifecycle.closeAfterSec`. Facts (glitch, gap, take-off/landing, emergency) still report.
 
 ### 9.7 Data glitch (P0)
 - For each point i: implied rate from i-1 to i exceeds `spikeRateFpm`, and within `revertWithinSamples` the altitude returns within `revertToleranceFt` of point i-1.

@@ -49,8 +49,8 @@ describe("event engine", () => {
   it("passes squawk and emergency through from the aircraft state", () => {
     const { store, engine } = setup();
     store.ingest([state("7c0001", obs(T0), { squawk: "7700", emergency: "general" })]);
-    // No emergency detector until phase 10; this checks the context is built without error.
-    expect(engine.evaluate(T0).opened).toEqual([]);
+    const [ev] = engine.evaluate(T0).opened;
+    expect(ev).toMatchObject({ type: "emergency", confidence: "fact", evidence: { squawk: "7700", emergency: "general" } });
   });
 
   it("drops an aircraft keepSec after its last position and closes its events", () => {

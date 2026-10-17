@@ -13,6 +13,7 @@ import {
   formatVerticalRate,
 } from "../../lib/format";
 import { openEventsFor } from "../../lib/liveState";
+import { earlierEvents } from "../../lib/timeline";
 import { useNow } from "../../lib/useNow";
 import { useAircraftStore } from "../../store/aircraftStore";
 import { FollowButton } from "../follow/FollowButton";
@@ -108,6 +109,7 @@ export function DetailsPanel() {
   const state = detail?.state;
   const callsign = live?.callsign ?? state?.callsign ?? null;
   const open = openEventsFor(events, hex);
+  const earlier = earlierEvents(detail?.recentEvents ?? [], new Set(open.map((e) => e.id)));
   const altitude = live ? displayAltitude(live) : null;
   const seen = formatSightings(detail?.sightings);
   const ageSec = live && now !== null ? live.serverNow - live.lastPosTs + (now - live.receivedAtMs) / 1000 : null;
@@ -175,6 +177,21 @@ export function DetailsPanel() {
                 <p className="text-sm text-text/90">No notable changes in the last few minutes.</p>
               )}
               {selection.status === "loading" && !detail && <p className="text-sm text-muted">Loading…</p>}
+              {earlier.length > 0 && (
+                <div className="pt-2">
+                  <h4 className="mb-1 text-xs uppercase tracking-wide text-muted">Earlier</h4>
+                  <ol className="space-y-2 border-l border-white/10 pl-3 text-sm">
+                    {earlier.map((item) => (
+                      <li key={item.id}>
+                        <p className="text-text">
+                          {item.title} <span className="text-muted">· {item.when}</span>
+                        </p>
+                        <p className="text-text/80">{item.seen}</p>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
               {selection.status === "error" && (
                 <p className="text-sm text-amber">Couldn&apos;t refresh the details. Trying again with the next update.</p>
               )}

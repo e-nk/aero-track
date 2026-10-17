@@ -148,7 +148,7 @@ function replaySelection(engine: ReplayEngine, hex: string) {
   const pre = preprocess(track, THRESHOLDS);
   return {
     status: "ready" as const,
-    detail: { state, history: pre.status, openEvents: engine.openEvents().filter((e) => e.hex === hex), recentEvents: [] },
+    detail: { state, history: pre.status, openEvents: engine.openEvents().filter((e) => e.hex === hex), recentEvents: engine.recentEvents(hex) },
     segments: pre.segments,
   };
 }

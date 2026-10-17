@@ -25,6 +25,7 @@ export class ReplayEngine {
   private readonly byHex: Map<string, RecordingAircraft>;
   private cursor = new Map<string, number>(); // points consumed per aircraft
   private gone = new Set<string>(); // aircraft past buffer.keepSec without news
+  private ended: BehaviourEvent[] = []; // closed events, for the timeline
   private lifecycle!: EventLifecycle;
   private nextEval!: number;
   private ids = 0;
@@ -54,6 +55,7 @@ export class ReplayEngine {
       changes.opened.push(...c.opened);
       changes.updated.push(...c.updated);
       changes.closed.push(...c.closed);
+      this.ended.push(...c.closed);
       this.nextEval += this.evalSec;
     }
     this.consumeUpTo(t);
@@ -100,6 +102,11 @@ export class ReplayEngine {
     return this.lifecycle.openEvents();
   }
 
+  /** Ended events for one aircraft, newest first (the panel's timeline). */
+  recentEvents(hex: string, limit = 20): BehaviourEvent[] {
+    return this.ended.filter((e) => e.hex === hex).reverse().slice(0, limit);
+  }
+
   identity(hex: string): Omit<RecordingAircraft, "points"> | undefined {
     const a = this.byHex.get(hex);
     if (!a) return undefined;
@@ -114,6 +121,7 @@ export class ReplayEngine {
   private reset() {
     this.cursor = new Map();
     this.gone = new Set();
+    this.ended = [];
     this.lifecycle = new EventLifecycle({
       thresholds: this.thresholds,
       mode: this.recording.mode,

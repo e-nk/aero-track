@@ -6,7 +6,7 @@ import type { LiveAircraft } from "../lib/liveState";
 const NOW = 1_792_200_000;
 
 const live = (c: Partial<Record<number, unknown>>, receivedAtMs = 0, serverNow = NOW): LiveAircraft => {
-  const base: CompactAircraft = ["7c0001", "QFA1", -33.9, 151.0, 10000, 250, 0, 0, "B738", "A3", NOW, false, false];
+  const base: CompactAircraft = ["7c0001", "QFA1", -33.9, 151.0, 10000, 250, 0, 0, "B738", "A3", NOW, false, false, null];
   for (const [i, v] of Object.entries(c)) (base as unknown[])[Number(i)] = v;
   return { ...fromCompact(base), receivedAtMs, serverNow };
 };
@@ -47,6 +47,12 @@ describe("buildAircraftFeatures", () => {
     const old = build([live({ 10: NOW - THRESHOLDS.display.staleAfterSec - 1 })], 0);
     expect(fresh.features[0]!.properties.stale).toBe(false);
     expect(old.features[0]!.properties.stale).toBe(true);
+  });
+
+  it("colours by GPS altitude when present, so the map matches the panel", () => {
+    // Pressure altitude 9,800 (low band) but GPS 10,300 (mid band).
+    const fc = build([live({ 4: 9800, 13: 10300 })], 0);
+    expect(fc.features[0]!.properties.band).toBe("mid");
   });
 
   it("carries the open-event flag and ground band", () => {

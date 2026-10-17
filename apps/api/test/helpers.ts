@@ -23,6 +23,7 @@ export const state = (hex: string, last: Observation, patch: Partial<AircraftSta
   category: "A3",
   squawk: "1000",
   emergency: null,
+  altGeomFt: null,
   last,
   lastPosTs: last.t,
   mode: "live",

@@ -15,7 +15,7 @@ export interface Repo {
   /** Live positions with t >= sinceSec, oldest first. */
   loadPositionsSince(sinceSec: number): Promise<StoredPosition[]>;
   /** Identity rows for the given aircraft. */
-  loadAircraft(hexes: string[]): Promise<Omit<AircraftState, "last" | "lastPosTs" | "squawk" | "emergency" | "mode">[]>;
+  loadAircraft(hexes: string[]): Promise<Omit<AircraftState, "last" | "lastPosTs" | "squawk" | "emergency" | "altGeomFt" | "mode">[]>;
   loadOpenEvents(): Promise<BehaviourEvent[]>;
   /** Most recent events for one aircraft, newest first. */
   recentEvents(hex: string, limit: number): Promise<BehaviourEvent[]>;

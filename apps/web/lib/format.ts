@@ -5,9 +5,23 @@ const n = new Intl.NumberFormat("en-US");
 const KMH_PER_KNOT = 1.852;
 const COMPASS = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"];
 
-export function formatAltitude(altFt: number | null, onGround: boolean): string {
-  if (onGround) return "On the ground";
-  return altFt === null ? NOT_AVAILABLE : `${n.format(Math.round(altFt))} ft`;
+const PRESSURE_NOTE =
+  "Measured against standard air pressure, so it can differ from the real height by a few hundred feet.";
+
+export interface DisplayAltitude {
+  text: string;
+  ft: number | null; // the value shown, for colour bands
+  note: string | null;
+}
+
+/** GPS altitude when we have it, otherwise labelled pressure altitude (SPEC 12.4). */
+export function displayAltitude(a: { altFt: number | null; altGeomFt: number | null; onGround: boolean }): DisplayAltitude {
+  if (a.onGround) return { text: "On the ground", ft: 0, note: null };
+  if (a.altGeomFt !== null) return { text: `${n.format(Math.round(a.altGeomFt))} ft (GPS)`, ft: a.altGeomFt, note: null };
+  if (a.altFt !== null) {
+    return { text: `${n.format(Math.round(a.altFt))} ft (pressure altitude)`, ft: a.altFt, note: PRESSURE_NOTE };
+  }
+  return { text: NOT_AVAILABLE, ft: null, note: null };
 }
 
 export function formatSpeed(gsKt: number | null): string {

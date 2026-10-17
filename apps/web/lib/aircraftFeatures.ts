@@ -42,7 +42,8 @@ export function buildAircraftFeatures(
           hex: a.hex,
           callsign: a.callsign,
           icon: a.trackDeg === null ? "dot" : iconClass(a),
-          band: altitudeBand(a.altFt, a.onGround, display.altitudeBandsFt),
+          // Same altitude the panel shows: GPS when present, else barometric.
+          band: altitudeBand(a.altGeomFt ?? a.altFt, a.onGround, display.altitudeBandsFt),
           rotation: a.trackDeg ?? 0,
           stale: ageSec > display.staleAfterSec,
           hasEvent: a.hasOpenEvent,

@@ -11,6 +11,7 @@ const state: AircraftState = {
   category: "A2",
   squawk: "6773",
   emergency: "none",
+  altGeomFt: 7600,
   last: {
     t: 1792219219.019,
     lat: -34.020655,
@@ -41,15 +42,16 @@ describe("CompactAircraft", () => {
       1792219219.019,
       true,
       false,
+      7600,
     ]);
   });
 
   it("keeps unknown values as null", () => {
     const c = toCompact(
-      { ...state, callsign: null, typeCode: null, category: null, last: { ...state.last, altFt: null, gsKt: null, trackDeg: null, baroRateFpm: null } },
+      { ...state, callsign: null, typeCode: null, category: null, altGeomFt: null, last: { ...state.last, altFt: null, gsKt: null, trackDeg: null, baroRateFpm: null } },
       false,
     );
-    expect(c).toEqual(["7cb05c", null, -34.020655, 150.826664, null, null, null, null, null, null, 1792219219.019, false, false]);
+    expect(c).toEqual(["7cb05c", null, -34.020655, 150.826664, null, null, null, null, null, null, 1792219219.019, false, false, null]);
   });
 
   it("decodes back to named fields", () => {
@@ -67,6 +69,7 @@ describe("CompactAircraft", () => {
       lastPosTs: 1792219219.019,
       hasOpenEvent: false,
       onGround: true,
+      altGeomFt: 7600,
     });
   });
 });

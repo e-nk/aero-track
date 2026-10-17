@@ -3,7 +3,7 @@ import type { AircraftState } from "./types";
 /**
  * Small per-aircraft tuple for SSE snapshots (SPEC 11.8):
  * [hex, callsign, lat, lon, altFt, gsKt, trackDeg, baroRateFpm, typeCode,
- *  category, lastPosTs, hasOpenEvent, onGround]
+ *  category, lastPosTs, hasOpenEvent, onGround, altGeomFt]
  */
 export type CompactAircraft = [
   hex: string,
@@ -19,6 +19,7 @@ export type CompactAircraft = [
   lastPosTs: number,
   hasOpenEvent: boolean,
   onGround: boolean,
+  altGeomFt: number | null,
 ];
 
 export interface DecodedAircraft {
@@ -35,6 +36,7 @@ export interface DecodedAircraft {
   lastPosTs: number;
   hasOpenEvent: boolean;
   onGround: boolean;
+  altGeomFt: number | null;
 }
 
 export function toCompact(s: AircraftState, hasOpenEvent: boolean): CompactAircraft {
@@ -53,10 +55,12 @@ export function toCompact(s: AircraftState, hasOpenEvent: boolean): CompactAircr
     s.lastPosTs,
     hasOpenEvent,
     o.onGround,
+    s.altGeomFt,
   ];
 }
 
 export function fromCompact(c: CompactAircraft): DecodedAircraft {
-  const [hex, callsign, lat, lon, altFt, gsKt, trackDeg, baroRateFpm, typeCode, category, lastPosTs, hasOpenEvent, onGround] = c;
-  return { hex, callsign, lat, lon, altFt, gsKt, trackDeg, baroRateFpm, typeCode, category, lastPosTs, hasOpenEvent, onGround };
+  const [hex, callsign, lat, lon, altFt, gsKt, trackDeg, baroRateFpm, typeCode, category, lastPosTs, hasOpenEvent, onGround, altGeomFt] =
+    c;
+  return { hex, callsign, lat, lon, altFt, gsKt, trackDeg, baroRateFpm, typeCode, category, lastPosTs, hasOpenEvent, onGround, altGeomFt };
 }

@@ -45,6 +45,7 @@ export async function hydrate({ repo, store, lifecycle, nowSec, thresholds }: Hy
       category: id?.category ?? null,
       squawk: lastSquawk.get(hex) ?? null,
       emergency: null, // not stored; the next poll refreshes it
+      altGeomFt: null, // display only, not stored; the next poll refreshes it
       last,
       lastPosTs: last.t,
       mode: "live",

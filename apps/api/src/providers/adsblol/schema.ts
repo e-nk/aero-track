@@ -11,6 +11,7 @@ export const AircraftSchema = z.looseObject({
   desc: z.string().optional(),
   category: z.string().optional(),
   alt_baro: z.union([z.number(), z.literal("ground")]).optional(),
+  alt_geom: z.number().optional(),
   gs: z.number().optional(),
   track: z.number().optional(),
   baro_rate: z.number().optional(),

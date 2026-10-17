@@ -33,6 +33,7 @@ export function adaptResponse(res: ParsedResponse): AdaptedResponse {
       category: text(ac.category),
       squawk: text(ac.squawk),
       emergency: text(ac.emergency), // absent means unknown, not "none"
+      altGeomFt: ac.alt_geom ?? null, // display only; never mixed into the barometric track
       last,
       lastPosTs: last.t,
       mode: "live",

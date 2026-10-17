@@ -31,6 +31,7 @@ describe("adaptResponse on the saved real response", () => {
       category: "A2",
       squawk: "6773",
       emergency: "none",
+      altGeomFt: 7600,
       last: {
         t: 1792219219.019,
         lat: -34.020655,
@@ -52,6 +53,12 @@ describe("adaptResponse on the saved real response", () => {
     expect(s.last.t).toBeCloseTo(NOW_SEC - 57.691, 3);
   });
 
+  it("carries GPS altitude separately and never uses it as the barometric altitude", () => {
+    const s = byHex(states, "7c65d9")!; // on the ground, no alt_geom
+    expect(s.altGeomFt).toBeNull();
+    expect(byHex(states, "76cdb5")).toMatchObject({ altGeomFt: 16700, last: { altFt: 16075 } });
+  });
+
   it("treats a missing emergency field as unknown, not 'none'", () => {
     expect(byHex(states, "7c6c96")!.emergency).toBeNull();
   });
@@ -63,7 +70,7 @@ describe("adaptResponse on the saved real response", () => {
   it("never leaks raw provider fields", () => {
     const keys = Object.keys(byHex(states, "7c146f")!).sort();
     expect(keys).toEqual(
-      ["hex", "callsign", "registration", "typeCode", "typeDesc", "category", "squawk", "emergency", "last", "lastPosTs", "mode"].sort(),
+      ["hex", "callsign", "registration", "typeCode", "typeDesc", "category", "squawk", "emergency", "altGeomFt", "last", "lastPosTs", "mode"].sort(),
     );
   });
 });

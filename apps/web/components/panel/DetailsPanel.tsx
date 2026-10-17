@@ -4,8 +4,8 @@ import { THRESHOLDS } from "@aerotrack/shared";
 import { useEffect } from "react";
 import {
   NOT_AVAILABLE,
+  displayAltitude,
   formatAge,
-  formatAltitude,
   formatHeading,
   formatSpeed,
   formatType,
@@ -16,11 +16,14 @@ import { useNow } from "../../lib/useNow";
 import { useAircraftStore } from "../../store/aircraftStore";
 import { EventCard } from "./EventCard";
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, note }: { label: string; value: string; note?: string | null }) {
   return (
-    <div className="flex justify-between gap-4 py-1.5">
-      <dt className="text-muted">{label}</dt>
-      <dd className={`text-right ${value === NOT_AVAILABLE ? "text-muted italic" : "text-text"}`}>{value}</dd>
+    <div className="py-1.5">
+      <div className="flex justify-between gap-4">
+        <dt className="text-muted">{label}</dt>
+        <dd className={`text-right ${value === NOT_AVAILABLE ? "text-muted italic" : "text-text"}`}>{value}</dd>
+      </div>
+      {note && <p className="mt-1 text-xs text-muted">{note}</p>}
     </div>
   );
 }
@@ -47,6 +50,7 @@ export function DetailsPanel() {
   const state = detail?.state;
   const callsign = live?.callsign ?? state?.callsign ?? null;
   const open = openEventsFor(events, hex);
+  const altitude = live ? displayAltitude(live) : null;
   const ageSec = live && now !== null ? live.serverNow - live.lastPosTs + (now - live.receivedAtMs) / 1000 : null;
 
   return (
@@ -91,7 +95,7 @@ export function DetailsPanel() {
             </h3>
             {live ? (
               <dl className="divide-y divide-white/5 text-sm">
-                <Row label="Altitude" value={formatAltitude(live.altFt, live.onGround)} />
+                <Row label="Altitude" value={altitude!.text} note={altitude!.note} />
                 <Row label="Speed" value={formatSpeed(live.gsKt)} />
                 <Row label="Heading" value={formatHeading(live.trackDeg)} />
                 <Row label="Vertical speed" value={formatVerticalRate(live.baroRateFpm, THRESHOLDS.display.levelRateFpm)} />

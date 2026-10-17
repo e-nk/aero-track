@@ -20,6 +20,8 @@ export interface AircraftState {
   category: string | null;
   squawk: string | null;
   emergency: string | null;
+  /** GPS (geometric) altitude, ft, for display only. Detectors use last.altFt (barometric). */
+  altGeomFt: number | null;
   last: Observation;
   lastPosTs: number;
   mode: DataMode;

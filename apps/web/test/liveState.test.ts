@@ -4,7 +4,7 @@ import { applyEventClose, applyEventUpsert, applySnapshot, applyStatus, initialL
 
 const NOW = 1_792_200_000;
 const compact = (hex: string, patch: Partial<Record<number, unknown>> = {}): CompactAircraft => {
-  const base: CompactAircraft = [hex, "QFA1", -33.9, 151.0, 10000, 250, 90, 0, "B738", "A3", NOW - 2, false, false];
+  const base: CompactAircraft = [hex, "QFA1", -33.9, 151.0, 10000, 250, 90, 0, "B738", "A3", NOW - 2, false, false, null];
   for (const [i, v] of Object.entries(patch)) (base as unknown[])[Number(i)] = v;
   return base;
 };

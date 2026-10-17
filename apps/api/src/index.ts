@@ -39,6 +39,7 @@ const nowSec = () => lastPollNow ?? Date.now() / 1000;
 const poller = createPoller({
   intervalMs: env.POLL_INTERVAL_MS,
   maxBackoffMs: THRESHOLDS.poll.maxBackoffMs,
+  downAfterFailures: THRESHOLDS.poll.downAfterFailures,
   run: async () => {
     const parsed = await client.fetchPoint({ ...THRESHOLDS.poll.centre, radiusNm: THRESHOLDS.poll.radiusNm });
     const result = pipeline.handle(parsed);

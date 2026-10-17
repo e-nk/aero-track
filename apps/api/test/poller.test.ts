@@ -19,7 +19,7 @@ describe("poller", () => {
   afterEach(() => vi.useRealTimers());
 
   const make = (run: () => Promise<void>, onError = vi.fn()) =>
-    createPoller({ run, intervalMs: INTERVAL, maxBackoffMs: MAX_BACKOFF, onError });
+    createPoller({ run, intervalMs: INTERVAL, maxBackoffMs: MAX_BACKOFF, downAfterFailures: 3, onError });
 
   it("starts as degraded, polls immediately, then every interval", async () => {
     const run = vi.fn(async () => {});
@@ -62,7 +62,7 @@ describe("poller", () => {
     await drainStop(p);
   });
 
-  it("backs off exponentially up to maxBackoffMs and reports down", async () => {
+  it("backs off exponentially up to maxBackoffMs: degraded at first, down after downAfterFailures", async () => {
     const onError = vi.fn();
     const run = vi.fn(async () => {
       throw new Error("boom");
@@ -70,7 +70,7 @@ describe("poller", () => {
     const p = make(run, onError);
     p.start();
     await vi.advanceTimersByTimeAsync(0);
-    expect(p.status()).toMatchObject({ feedStatus: "down", consecutiveFailures: 1 });
+    expect(p.status()).toMatchObject({ feedStatus: "degraded", consecutiveFailures: 1 });
 
     const starts: number[] = [];
     run.mockImplementation(async () => {
@@ -79,6 +79,7 @@ describe("poller", () => {
     });
     await vi.advanceTimersByTimeAsync(14000 + 28000 + 56000 + 60000 + 60000);
     expect(starts).toEqual([14000, 42000, 98000, 158000, 218000]);
+    expect(p.status()).toMatchObject({ feedStatus: "down", consecutiveFailures: 6 });
     expect(onError).toHaveBeenCalledTimes(6);
     expect(onError.mock.calls[0]![1]).toBe(1);
     await p.stop();
@@ -100,7 +101,7 @@ describe("poller", () => {
     await p.stop();
   });
 
-  it("keeps lastPollAt from the last success while down", async () => {
+  it("keeps lastPollAt from the last success while degraded", async () => {
     let fail = false;
     const p = make(async () => {
       if (fail) throw new Error("boom");
@@ -109,7 +110,7 @@ describe("poller", () => {
     await vi.advanceTimersByTimeAsync(0);
     fail = true;
     await vi.advanceTimersByTimeAsync(INTERVAL);
-    expect(p.status()).toMatchObject({ feedStatus: "down", lastPollAt: 1_792_200_000_000 });
+    expect(p.status()).toMatchObject({ feedStatus: "degraded", lastPollAt: 1_792_200_000_000 });
     await p.stop();
   });
 
@@ -139,6 +140,7 @@ describe("poller", () => {
       },
       intervalMs: INTERVAL,
       maxBackoffMs: MAX_BACKOFF,
+      downAfterFailures: 3,
       onError: () => {},
       onStatusChange,
     });
@@ -148,7 +150,31 @@ describe("poller", () => {
     await vi.advanceTimersByTimeAsync(INTERVAL + 14000); // 2 failures
     fail = false;
     await vi.advanceTimersByTimeAsync(28000); // recovers
-    expect(onStatusChange.mock.calls.map(([s]) => s.feedStatus)).toEqual(["ok", "down", "ok"]);
+    expect(onStatusChange.mock.calls.map(([s]) => s.feedStatus)).toEqual(["ok", "degraded", "ok"]);
+    await p.stop();
+  });
+
+  it("reports down only after downAfterFailures failures in a row", async () => {
+    let fail = false;
+    const onStatusChange = vi.fn();
+    const p = createPoller({
+      run: async () => {
+        if (fail) throw new Error("boom");
+      },
+      intervalMs: INTERVAL,
+      maxBackoffMs: MAX_BACKOFF,
+      downAfterFailures: 3,
+      onError: () => {},
+      onStatusChange,
+    });
+    p.start();
+    await vi.advanceTimersByTimeAsync(0);
+    fail = true;
+    await vi.advanceTimersByTimeAsync(INTERVAL + 14000 + 28000); // failures 1, 2, 3
+    expect(p.status()).toMatchObject({ feedStatus: "down", consecutiveFailures: 3 });
+    fail = false;
+    await vi.advanceTimersByTimeAsync(56000);
+    expect(onStatusChange.mock.calls.map(([s]) => s.feedStatus)).toEqual(["ok", "degraded", "down", "ok"]);
     await p.stop();
   });
 

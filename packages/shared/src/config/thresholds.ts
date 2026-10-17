@@ -6,6 +6,7 @@ export interface Thresholds {
     intervalMs: number;
     timeoutMs: number;
     maxBackoffMs: number;
+    downAfterFailures: number;
     radiusNm: number;
     centre: { lat: number; lon: number };
   };
@@ -65,9 +66,10 @@ export interface Thresholds {
 
 export const THRESHOLDS = {
   poll: {
-    intervalMs: 7000,
+    intervalMs: 10000, // 10 s: adsb.lol rate-limits faster polling (see SPEC 5.1)
     timeoutMs: 5000,
     maxBackoffMs: 60000, // exponential backoff cap after failures
+    downAfterFailures: 3, // one missed poll is "degraded"; three in a row (~1 min) is "down"
     radiusNm: 60,
     centre: { lat: -33.9, lon: 151.0 },
   },

@@ -4,6 +4,8 @@ export interface PollerOptions {
   run: () => Promise<void>;
   intervalMs: number;
   maxBackoffMs: number;
+  /** Consecutive failures before the feed counts as down. Fewer just mean "degraded". */
+  downAfterFailures: number;
   onError: (err: unknown, consecutiveFailures: number) => void;
   /** Called when feedStatus changes (not on every poll). */
   onStatusChange?: (status: PollerStatus) => void;
@@ -18,6 +20,7 @@ export interface PollerStatus {
 /**
  * One poll at a time (SPEC 11.1). The next poll is scheduled after the current
  * one finishes, so polls never overlap. Failures back off exponentially.
+ * One missed poll is "degraded" (data getting old); downAfterFailures in a row is "down".
  */
 export function createPoller(opts: PollerOptions) {
   let running = false;
@@ -43,7 +46,7 @@ export function createPoller(opts: PollerOptions) {
       delay = Math.max(0, opts.intervalMs - (Date.now() - started));
     } catch (err) {
       status.consecutiveFailures++;
-      setFeedStatus("down");
+      setFeedStatus(status.consecutiveFailures >= opts.downAfterFailures ? "down" : "degraded");
       opts.onError(err, status.consecutiveFailures);
       delay = Math.min(opts.maxBackoffMs, opts.intervalMs * 2 ** status.consecutiveFailures);
     } finally {

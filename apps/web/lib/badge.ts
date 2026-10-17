@@ -14,8 +14,10 @@ export function liveBadge(s: LiveState, nowMs: number, staleAfterSec: number): B
   }
   if (s.lastSnapshotAt === null) return { tone: "pending", text: "Connecting to live data…" };
   if (s.feedStatus === "down") return { tone: "down", text: "Live feed unavailable · showing last known positions" };
-  if (s.feedStatus !== "ok") return { tone: "pending", text: "Live · waiting for the first update" };
+  if (s.feedStatus !== "ok" && s.lastPollAt === null) return { tone: "pending", text: "Live · waiting for the first update" };
 
+  // "degraded" = a poll or two failed: not an outage, just data getting older.
   const ago = Math.max(0, Math.floor((nowMs - s.lastSnapshotAt) / 1000));
-  return { tone: ago > staleAfterSec ? "stale" : "live", text: `Live · updated ${ago}s ago` };
+  const stale = s.feedStatus === "degraded" || ago > staleAfterSec;
+  return { tone: stale ? "stale" : "live", text: `Live · updated ${ago}s ago` };
 }

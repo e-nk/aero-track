@@ -186,7 +186,7 @@ Endpoints (v2):
 
 Also listed but unused: `/v2/mil`, `/v2/ladd`, `/v2/pia`, `/api/0/airport/{icao}`, `/0/me`.
 
-Our poll: `GET /v2/point/-33.9/151.0/60` every 7 s to start (configurable). One request serves all clients. Watch for 429s before going lower.
+Our poll: `GET /v2/point/-33.9/151.0/60` every 10 s (configurable, minimum 5 s). One request serves all clients. At 7 s we saw a 429 every 1-2 minutes on 2026-10-17, so 10 s is the default.
 
 Response envelope (verified):
 ```json
@@ -396,7 +396,7 @@ All starting values. Tune on recorded data.
 
 ```ts
 export const THRESHOLDS = {
-  poll: { intervalMs: 7000, timeoutMs: 5000, maxBackoffMs: 60000, radiusNm: 60, centre: { lat: -33.9, lon: 151.0 } },
+  poll: { intervalMs: 10000, timeoutMs: 5000, maxBackoffMs: 60000, downAfterFailures: 3, radiusNm: 60, centre: { lat: -33.9, lon: 151.0 } },
   buffer: { keepSec: 900 },
   writer: { flushMs: 5000, maxRows: 500 },
   sse: { heartbeatMs: 15000, maxBufferedBytes: 1000000 },
@@ -607,7 +607,7 @@ Card labels: "What we see", "What this commonly means", "What we can't tell". Pl
 - Timeout 5 s via AbortController.
 - `feedStatus` starts as `degraded` until the first successful poll, then `ok`.
 - The next poll is scheduled when the current one finishes (interval minus the time it took), so polls never overlap. The provider's `now` drives detection, not the server clock.
-- On failure (network error, timeout, non-2xx, 429, or a body that isn't JSON): exponential backoff (`interval × 2^failures`) up to 60 s, set `feedStatus = "down"`, broadcast status. Keep last known states. A 429 is an HTML page with no `Retry-After`, so never parse it as data.
+- On failure (network error, timeout, non-2xx, 429, or a body that isn't JSON): exponential backoff (`interval × 2^failures`) up to 60 s. One or two failures in a row set `feedStatus = "degraded"` (data getting older); `poll.downAfterFailures` (3) in a row set `"down"`. Broadcast status on change. Keep last known states. A 429 is an HTML page with no `Retry-After`, so never parse it as data.
 - Exactly one poller per process, including in dev (guard against hot-reload starting a second one).
 - The adapter drops category C1-C7 (ground vehicles and obstacles) and type `TWR` (towers), and aircraft without `lat`/`lon`/`seen_pos` (position time unknown). Missing `emergency` maps to null, not `none`.
 - Manual check: `ADSB_USER_AGENT=... pnpm --filter api fetch:sample` makes one real request through client, schema and adapter and logs the result.
@@ -691,7 +691,7 @@ event: status        data: { feedStatus: "ok" | "degraded" | "down", lastPollAt 
 - Switching mode clears the map and store.
 
 ### 12.2 Mode badge (always visible)
-- Live: "Live · updated {n}s ago" (time since the last snapshot arrived, browser clock). Turns amber if stale over 30 s.
+- Live: "Live · updated {n}s ago" (time since the last snapshot arrived, browser clock). Turns amber if stale over 30 s, or while the feed is `degraded` (a missed poll is shown as ageing data, not an outage).
 - Can't reach our API: "Can't reach AeroTrack right now · showing last known positions".
 - Server started but no poll yet: "Live · waiting for the first update".
 - Live feed down: "Live feed unavailable · showing last known positions" plus a button "Watch a recorded flight".
@@ -790,7 +790,7 @@ Required fixtures and expectations:
 
 - Final product name: AeroTrack or FlightSense.
 - Accounts and watchlist: currently cut. Adding Better Auth or Auth.js with a watchlist table is roughly a half-day if needed.
-- Poll interval: adsb.lol publishes no limit (dynamic, load-based). Start at 7 s with one request and watch for 429s.
+- Poll interval: adsb.lol publishes no limit (dynamic, load-based). 7 s drew regular 429s; now 10 s. Revisit if 429s continue.
 - Whether to show "typical route" from the adsb.lol routeset API.
 - Aircraft details (year built, operator): on hold. Would need an open aircraft database with a compatible licence (the live API doesn't include them; archive traces have `ownOp`, `year`).
 - A source for lifetime flight history per aircraft (the owner is researching). Until then, only our own sightings (11.9).
@@ -804,7 +804,7 @@ PORT=8080
 ADSB_BASE_URL=https://api.adsb.lol
 ADSB_USER_AGENT=AeroTrack/0.1 (+you@example.com)
 ADSB_API_KEY=                 # optional, not required as of 2026-10-17
-POLL_INTERVAL_MS=7000
+POLL_INTERVAL_MS=10000
 CORS_ORIGIN=https://aerotrack.vercel.app
 ADMIN_TOKEN=change-me
 R2_ACCOUNT_ID=

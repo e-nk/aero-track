@@ -24,8 +24,13 @@ describe("liveBadge", () => {
   });
 
   it("says when the server is still waiting for its first poll", () => {
-    const s = at({ connection: "open", feedStatus: "degraded", lastSnapshotAt: 0 });
+    const s = at({ connection: "open", feedStatus: "degraded", lastPollAt: null, lastSnapshotAt: 0 });
     expect(liveBadge(s, 1000, STALE)).toEqual({ tone: "pending", text: "Live · waiting for the first update" });
+  });
+
+  it("shows a missed poll as an amber, ageing update rather than an outage", () => {
+    const s = at({ connection: "open", feedStatus: "degraded", lastPollAt: 5_000, lastSnapshotAt: 5_000 });
+    expect(liveBadge(s, 25_000, STALE)).toEqual({ tone: "stale", text: "Live · updated 20s ago" });
   });
 
   it("says when the live feed is down", () => {

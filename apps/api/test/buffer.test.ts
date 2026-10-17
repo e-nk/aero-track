@@ -9,7 +9,7 @@ describe("AircraftStore", () => {
   it("stores a new aircraft and returns its new observation", () => {
     const store = new AircraftStore(THRESHOLDS);
     const added = store.ingest([state("7c0001", obs(T0))]);
-    expect(added).toEqual([{ hex: "7c0001", obs: obs(T0), squawk: "1000" }]);
+    expect(added).toEqual([{ hex: "7c0001", obs: obs(T0), squawk: "1000", callsign: "TEST01" }]);
     expect(store.track("7c0001")).toEqual([obs(T0)]);
     expect(store.get("7c0001")?.callsign).toBe("TEST01");
   });

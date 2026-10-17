@@ -6,7 +6,7 @@ import { T0, obs, state } from "./helpers";
 
 const opts = { flushMs: 5000, maxRows: 3, maxQueuedRows: 6 };
 const silent = { warn: () => {}, error: () => {} };
-const row = (i: number) => ({ hex: "7c0001", obs: obs(T0 + i), squawk: null, mode: "live" as const });
+const row = (i: number) => ({ hex: "7c0001", obs: obs(T0 + i), squawk: null, callsign: null, mode: "live" as const });
 
 const event = (id: string, status: "open" | "closed" = "open"): BehaviourEvent => ({
   id,

@@ -3,7 +3,10 @@ import type { StoredPosition } from "../repo";
 
 // Builds a recording (SPEC 8) from stored live positions. Pure: the caller loads the rows.
 
-type Identity = Pick<AircraftState, "hex" | "callsign" | "registration" | "typeCode" | "category">;
+type Identity = Pick<AircraftState, "hex" | "callsign" | "registration" | "typeCode" | "category"> & { lastSeenAt?: number };
+
+// How long after the window an aircraft may still be seen for its stored callsign to count as the one in use then.
+const LEGACY_CALLSIGN_SLACK_SEC = 900;
 
 export interface BuildRecordingInput {
   title: string;
@@ -33,12 +36,14 @@ const round6 = (n: number) => Math.round(n * 1e6) / 1e6;
 export function buildRecording(input: BuildRecordingInput): RecordingFile {
   const only = input.hexes ? new Set(input.hexes) : null;
   const byHex = new Map<string, RecordingPoint[]>();
+  const broadcast = new Map<string, string>(); // last callsign seen in the window, per aircraft
   for (const r of input.rows) {
     const o = r.obs;
     if (o.t < input.from || o.t > input.to || (only && !only.has(r.hex))) continue;
     const points = byHex.get(r.hex) ?? [];
     points.push([o.t, o.lat, o.lon, o.altFt, o.gsKt, o.trackDeg, o.baroRateFpm, o.onGround, r.squawk]);
     byHex.set(r.hex, points);
+    if (r.callsign) broadcast.set(r.hex, r.callsign);
   }
   if (!byHex.size) throw new Error("No positions in that window");
 
@@ -47,9 +52,14 @@ export function buildRecording(input: BuildRecordingInput): RecordingFile {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([hex, points]) => {
       const id = ids.get(hex);
+      // Never label a recording with a callsign from a later flight (rule 2). Rows saved
+      // before callsigns were stored fall back to the aircraft's last callsign only if
+      // it wasn't seen again after the window.
+      const legacy =
+        id?.lastSeenAt !== undefined && id.lastSeenAt <= input.to + LEGACY_CALLSIGN_SLACK_SEC ? id.callsign : null;
       return {
         hex,
-        callsign: id?.callsign ?? null,
+        callsign: broadcast.get(hex) ?? legacy,
         registration: id?.registration ?? null,
         typeCode: id?.typeCode ?? null,
         category: id?.category ?? null,

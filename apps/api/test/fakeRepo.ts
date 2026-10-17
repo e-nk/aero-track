@@ -61,7 +61,7 @@ export class FakeRepo implements Repo {
     return this.positions
       .filter((p) => p.mode === "live" && p.obs.t >= fromSec && p.obs.t <= toSec)
       .sort((a, b) => a.obs.t - b.obs.t)
-      .map(({ hex, obs, squawk }) => ({ hex, obs, squawk }));
+      .map(({ hex, obs, squawk, callsign }) => ({ hex, obs, squawk, callsign }));
   }
   async saveRecording(rec: RecordingFile) {
     this.maybeFail("saveRecording");
@@ -81,13 +81,14 @@ export class FakeRepo implements Repo {
   async loadAircraft(hexes: string[]) {
     return [...this.aircraft.values()]
       .filter((a) => hexes.includes(a.hex))
-      .map(({ hex, callsign, registration, typeCode, typeDesc, category }) => ({
+      .map(({ hex, callsign, registration, typeCode, typeDesc, category, lastPosTs }) => ({
         hex,
         callsign,
         registration,
         typeCode,
         typeDesc,
         category,
+        lastSeenAt: lastPosTs,
       }));
   }
   async loadOpenEvents() {

@@ -4,6 +4,8 @@ export interface NewObservation {
   hex: string;
   obs: Observation;
   squawk: string | null;
+  /** Callsign broadcast at that moment (recordings need the one in use then, not a later one). */
+  callsign: string | null;
 }
 
 /** In-memory ring buffer per aircraft (SPEC 11.2). Detectors read from here. */
@@ -24,7 +26,7 @@ export class AircraftStore {
       if (s.last.t > lastT) {
         track.push(s.last);
         this.tracks.set(s.hex, track);
-        added.push({ hex: s.hex, obs: s.last, squawk: s.squawk });
+        added.push({ hex: s.hex, obs: s.last, squawk: s.squawk, callsign: s.callsign });
       }
       // Identity fields always refresh; the position only moves forward.
       const newer = !prev || s.lastPosTs >= prev.lastPosTs;

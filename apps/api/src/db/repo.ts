@@ -43,6 +43,7 @@ const optDate = (sec: number | null) => (sec === null ? null : toDate(sec));
 const positionFromRow = (r: typeof positions.$inferSelect) => ({
   hex: r.hex,
   squawk: r.squawk,
+  callsign: r.callsign,
   obs: {
     t: toSec(r.t),
     lat: r.lat,
@@ -81,7 +82,7 @@ export function createPgRepo(db: Db): Repo {
         await db
           .insert(positions)
           .values(
-            part.map(({ hex, obs, squawk, mode }) => ({
+            part.map(({ hex, obs, squawk, callsign, mode }) => ({
               hex,
               t: toDate(obs.t),
               lat: obs.lat,
@@ -92,6 +93,7 @@ export function createPgRepo(db: Db): Repo {
               trackDeg: obs.trackDeg,
               baroRateFpm: roundOrNull(obs.baroRateFpm),
               squawk,
+              callsign,
               mode,
             })),
           )
@@ -214,13 +216,14 @@ export function createPgRepo(db: Db): Repo {
     async loadAircraft(hexes: string[]) {
       if (!hexes.length) return [];
       const rows = await db.select().from(aircraft).where(inArray(aircraft.hex, hexes));
-      return rows.map(({ hex, callsign, registration, typeCode, typeDesc, category }) => ({
+      return rows.map(({ hex, callsign, registration, typeCode, typeDesc, category, lastSeenAt }) => ({
         hex,
         callsign,
         registration,
         typeCode,
         typeDesc,
         category,
+        lastSeenAt: toSec(lastSeenAt),
       }));
     },
 

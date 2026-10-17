@@ -37,9 +37,9 @@ describe("hydrate", () => {
     const { repo, store, run } = setup();
     await repo.upsertAircraft([state("7c0001", obs(NOW - 7), { callsign: "QFA1", registration: "VH-OQA" })]);
     await repo.insertPositions([
-      { hex: "7c0001", obs: obs(NOW - THRESHOLDS.buffer.keepSec - 1), squawk: "1000", mode: "live" },
-      { hex: "7c0001", obs: obs(NOW - 14), squawk: "1000", mode: "live" },
-      { hex: "7c0001", obs: obs(NOW - 7, { altFt: 11000 }), squawk: "1234", mode: "live" },
+      { hex: "7c0001", obs: obs(NOW - THRESHOLDS.buffer.keepSec - 1), squawk: "1000", callsign: null, mode: "live" },
+      { hex: "7c0001", obs: obs(NOW - 14), squawk: "1000", callsign: null, mode: "live" },
+      { hex: "7c0001", obs: obs(NOW - 7, { altFt: 11000 }), squawk: "1234", callsign: null, mode: "live" },
     ]);
 
     const summary = await run();
@@ -55,14 +55,14 @@ describe("hydrate", () => {
 
   it("uses Not available identity when the aircraft row is missing", async () => {
     const { repo, store, run } = setup();
-    await repo.insertPositions([{ hex: "7c0002", obs: obs(NOW - 7), squawk: null, mode: "live" }]);
+    await repo.insertPositions([{ hex: "7c0002", obs: obs(NOW - 7), squawk: null, callsign: null, mode: "live" }]);
     await run();
     expect(store.get("7c0002")).toMatchObject({ callsign: null, registration: null, typeCode: null, category: null });
   });
 
   it("continues open events for aircraft still in the buffer", async () => {
     const { repo, lifecycle, run } = setup();
-    await repo.insertPositions([{ hex: "7c0001", obs: obs(NOW - 7), squawk: null, mode: "live" }]);
+    await repo.insertPositions([{ hex: "7c0001", obs: obs(NOW - 7), squawk: null, callsign: null, mode: "live" }]);
     await repo.upsertEvents([openEvent("e1", "7c0001")]);
     const summary = await run();
     expect(summary.restoredEvents).toBe(1);

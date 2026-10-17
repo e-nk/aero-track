@@ -485,7 +485,7 @@ Used for live captures, archive imports and test fixtures. Stored in Postgres (`
 }
 ```
 - `points` tuple: `[t, lat, lon, altFt|null, gsKt|null, trackDeg|null, baroRateFpm|null, onGround, squawk|null]`. `onGround` is needed for take-off/landing replay; `squawk` for the emergency detector. Barometric altitude only (never GPS), like the live detectors.
-- Exported from `positions` (live mode) and `aircraft` identity for a time window, optionally limited to some hexes. `capturedFrom`/`capturedTo` are trimmed to the first and last point inside the requested window, so a replay never opens on an empty map.
+- Exported from `positions` (live mode) and `aircraft` identity for a time window, optionally limited to some hexes. The callsign is the one broadcast during the window (`positions.callsign`), never a later one: the same aircraft often flies in and out under different flight numbers. For rows saved before callsigns were stored, the aircraft's stored callsign is used only if it wasn't seen again more than 15 minutes after the window; otherwise "Not available". `capturedFrom`/`capturedTo` are trimmed to the first and last point inside the requested window, so a replay never opens on an empty map.
 - `reportedCause` (optional): `{ "text": "...", "sourceUrl": "...", "sourceName": "..." }`. Shown separately as "Later reported as ... [source]". Never mixed into detector output.
 - Fixture files use `"mode": "fixture"` and fake callsigns like `TEST01`.
 
@@ -652,7 +652,8 @@ Card labels: "What we see", "What this commonly means", "What we can't tell". Pl
 ```ts
 aircraft: hex (pk text), callsign, registration, type_code, type_desc, category, last_seen_at (timestamptz)
 positions: id (bigserial pk), hex, t (timestamptz), lat, lon, alt_ft (int null), on_ground (bool),
-           gs_kt (real null), track_deg (real null), baro_rate_fpm (int null), squawk (text null), mode (text)
+           gs_kt (real null), track_deg (real null), baro_rate_fpm (int null), squawk (text null),
+           callsign (text null: as broadcast at t; null for rows saved before 2026-10-18), mode (text)
            unique index (hex, t) (re-inserting a position is a no-op), index (t)
 events: id (uuid pk), hex, type, confidence, status, mode, window_start, window_end,
         evidence (jsonb), explanation (jsonb), explanation_source, opened_at, updated_at, closed_at

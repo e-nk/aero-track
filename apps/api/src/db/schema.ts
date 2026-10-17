@@ -41,6 +41,7 @@ export const positions = pgTable(
     trackDeg: real("track_deg"),
     baroRateFpm: integer("baro_rate_fpm"),
     squawk: text("squawk"),
+    callsign: text("callsign"), // as broadcast at time t (null for rows saved before 2026-10-18)
     mode: text("mode").notNull(),
   },
   (table) => [

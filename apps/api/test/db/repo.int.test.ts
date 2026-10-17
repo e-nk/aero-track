@@ -50,25 +50,25 @@ describe.skipIf(!url)("Postgres repo", () => {
     const a = obs(T0 + 7.019, { altFt: null, gsKt: 245.2, trackDeg: 76.08, baroRateFpm: null, lat: -34.020655 });
     const b = obs(T0, { onGround: true, altFt: 0 });
     await repo.insertPositions([
-      { hex: "7c0001", obs: a, squawk: "6773", mode: "live" },
-      { hex: "7c0001", obs: b, squawk: null, mode: "live" },
+      { hex: "7c0001", obs: a, squawk: "6773", callsign: null, mode: "live" },
+      { hex: "7c0001", obs: b, squawk: null, callsign: null, mode: "live" },
     ]);
     expect(await repo.loadPositionsSince(T0)).toEqual([
-      { hex: "7c0001", obs: b, squawk: null },
-      { hex: "7c0001", obs: a, squawk: "6773" },
+      { hex: "7c0001", obs: b, squawk: null, callsign: null },
+      { hex: "7c0001", obs: a, squawk: "6773", callsign: null },
     ]);
     expect(await repo.loadPositionsSince(T0 + 1)).toHaveLength(1);
   });
 
   it("ignores a duplicate position for the same aircraft and time", async () => {
-    const row = { hex: "7c0001", obs: obs(T0), squawk: null, mode: "live" as const };
+    const row = { hex: "7c0001", obs: obs(T0), squawk: null, callsign: null, mode: "live" as const };
     await repo.insertPositions([row]);
     await repo.insertPositions([row, { ...row, obs: obs(T0 + 7) }]);
     expect(await repo.loadPositionsSince(0)).toHaveLength(2);
   });
 
   it("loads only live positions for hydration", async () => {
-    await repo.insertPositions([{ hex: "7c0001", obs: obs(T0), squawk: null, mode: "recorded" }]);
+    await repo.insertPositions([{ hex: "7c0001", obs: obs(T0), squawk: null, callsign: null, mode: "recorded" }]);
     expect(await repo.loadPositionsSince(0)).toEqual([]);
   });
 
@@ -76,7 +76,7 @@ describe.skipIf(!url)("Postgres repo", () => {
     await repo.upsertAircraft([state("7c0001", obs(T0), { callsign: "OLD" })]);
     await repo.upsertAircraft([state("7c0001", obs(T0 + 7), { callsign: "NEW", registration: "VH-ABC" })]);
     expect(await repo.loadAircraft(["7c0001", "7cffff"])).toEqual([
-      { hex: "7c0001", callsign: "NEW", registration: "VH-ABC", typeCode: "B738", typeDesc: null, category: "A3" },
+      { hex: "7c0001", callsign: "NEW", registration: "VH-ABC", typeCode: "B738", typeDesc: null, category: "A3", lastSeenAt: T0 + 7 },
     ]);
   });
 
@@ -158,10 +158,10 @@ describe.skipIf(!url)("Postgres repo", () => {
 
   it("loads live positions between two times, oldest first", async () => {
     await repo.insertPositions([
-      { hex: "7c0001", obs: obs(T0), squawk: null, mode: "live" },
-      { hex: "7c0001", obs: obs(T0 + 60), squawk: "1000", mode: "live" },
-      { hex: "7c0001", obs: obs(T0 + 120), squawk: null, mode: "live" },
-      { hex: "7c0002", obs: obs(T0 + 30), squawk: null, mode: "recorded" },
+      { hex: "7c0001", obs: obs(T0), squawk: null, callsign: null, mode: "live" },
+      { hex: "7c0001", obs: obs(T0 + 60), squawk: "1000", callsign: null, mode: "live" },
+      { hex: "7c0001", obs: obs(T0 + 120), squawk: null, callsign: null, mode: "live" },
+      { hex: "7c0002", obs: obs(T0 + 30), squawk: null, callsign: null, mode: "recorded" },
     ]);
     expect((await repo.loadPositionsBetween(T0, T0 + 60)).map((r) => r.obs.t)).toEqual([T0, T0 + 60]);
   });
@@ -171,7 +171,7 @@ describe.skipIf(!url)("Postgres repo", () => {
       title: "Window",
       from: T0,
       to: T0 + 600,
-      rows: [{ hex: "7c0001", obs: obs(T0), squawk: null }],
+      rows: [{ hex: "7c0001", obs: obs(T0), squawk: null, callsign: null }],
       identities: [],
     });
     await repo.saveRecording(rec);

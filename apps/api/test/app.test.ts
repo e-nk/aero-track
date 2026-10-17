@@ -218,7 +218,7 @@ describe("api routes", () => {
     it("lists recordings and serves one in full", async () => {
       const { app, repo } = setup();
       close = () => app.close();
-      await repo.insertPositions([{ hex: "7c0001", obs: obs(T0), squawk: null, mode: "live" }]);
+      await repo.insertPositions([{ hex: "7c0001", obs: obs(T0), squawk: null, callsign: null, mode: "live" }]);
       const created = await post(app, { title: "Morning", from: T0 - 10, to: T0 + 10 }, "s3cret-token");
       expect(created.statusCode).toBe(201);
       const id = created.json().id;

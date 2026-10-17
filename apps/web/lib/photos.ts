@@ -2,6 +2,8 @@
 // API directly: their terms forbid proxying or re-exposing it through our api.
 // URLs are used unchanged; images load straight from their servers.
 
+import { OFFLINE } from "./config";
+
 const API = "https://api.planespotters.net/pub/photos/hex/";
 const DAY_MS = 24 * 60 * 60 * 1000; // terms allow caching API responses for up to 24 hours
 const PLANESPOTTERS_HOSTS = ["planespotters.net", "plnspttrs.net"];
@@ -67,7 +69,9 @@ export function createPhotoLookup(opts: PhotoLookupOptions = {}) {
   };
 }
 
-export const lookupPhoto = createPhotoLookup();
+const online = createPhotoLookup();
+/** No photo lookups in offline demo mode (they would only fail). */
+export const lookupPhoto: typeof online = (hex, signal) => (OFFLINE ? Promise.resolve(null) : online(hex, signal));
 
 export function photoCredit(registration: string | null, photographer: string): string {
   const subject = registration ? `Photo of ${registration} by` : "Photo by";

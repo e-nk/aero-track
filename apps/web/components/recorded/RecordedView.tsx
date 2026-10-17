@@ -5,6 +5,7 @@ import { THRESHOLDS, type AircraftState, type RecordingFile } from "@aerotrack/s
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { OFFLINE } from "../../lib/config";
 import { loadRecording } from "../../lib/recordings";
 import { ReplayEngine } from "../../lib/replay/engine";
 import { useAircraftStore } from "../../store/aircraftStore";
@@ -106,10 +107,10 @@ export function RecordedView({ id }: { id: string }) {
           <ModeBadge />
         </div>
         <Link
-          href="/"
+          href={OFFLINE ? "/recorded" : "/"}
           className="pointer-events-auto rounded-full border border-white/10 bg-navy/90 px-3 py-1.5 text-sm text-sky shadow-lg hover:bg-white/5"
         >
-          Back to live
+          {OFFLINE ? "All recordings" : "Back to live"}
         </Link>
       </header>
       {!recording && <p className="absolute inset-0 flex items-center justify-center text-muted">Loading recording…</p>}

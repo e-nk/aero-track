@@ -1,7 +1,8 @@
 "use client";
 
 import { THRESHOLDS } from "@aerotrack/shared";
-import { setWorkerUrl, type GeoJSONSource } from "maplibre-gl";
+import { addProtocol, setWorkerUrl, type GeoJSONSource, type StyleSpecification } from "maplibre-gl";
+import { Protocol } from "pmtiles";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Map, {
@@ -13,7 +14,8 @@ import Map, {
   type MapRef,
 } from "react-map-gl/maplibre";
 import { buildAircraftFeatures } from "../../lib/aircraftFeatures";
-import { AUSTRALIA_VIEW, DATA_ATTRIBUTION, MAP_STYLE_URL, OPENSKY_ATTRIBUTION } from "../../lib/config";
+import { AUSTRALIA_VIEW, DATA_ATTRIBUTION, MAP_STYLE_URL, OFFLINE, OPENSKY_ATTRIBUTION } from "../../lib/config";
+import { offlineStyle } from "../../lib/mapStyle";
 import { coverageCircle } from "../../lib/coverage";
 import { buildOverviewFeatures } from "../../lib/overviewFeatures";
 import { trackFeature } from "../../lib/trackFeature";
@@ -35,6 +37,8 @@ import { addAircraftIcons } from "./icons";
 
 // Served from /public (copied by scripts/copy-maplibre-worker.mjs).
 setWorkerUrl("/maplibre-gl-worker.mjs");
+// Offline: tiles come from public/offline/sydney.pmtiles through the pmtiles:// protocol (SPEC 13).
+if (OFFLINE) addProtocol("pmtiles", new Protocol().tile);
 
 const EMPTY = { type: "FeatureCollection" as const, features: [] };
 const COVERAGE = coverageCircle(THRESHOLDS.poll.centre, THRESHOLDS.poll.radiusNm);
@@ -62,6 +66,7 @@ function revealUnderPanel(e: MapLayerMouseEvent) {
 export default function AircraftMap({ initialBounds }: { initialBounds?: [number, number, number, number] } = {}) {
   const mapRef = useRef<MapRef>(null);
   const [iconsReady, setIconsReady] = useState(false);
+  const [mapStyle] = useState<string | StyleSpecification>(() => (OFFLINE ? offlineStyle(window.location.origin) : MAP_STYLE_URL));
   const [cursor, setCursor] = useState<string>("");
   const selectedHex = useAircraftStore((s) => s.selectedHex);
   const segments = useAircraftStore((s) => s.selection.segments);
@@ -142,7 +147,7 @@ export default function AircraftMap({ initialBounds }: { initialBounds?: [number
     <Map
       ref={mapRef}
       initialViewState={initialBounds ? { bounds: initialBounds, fitBoundsOptions: { padding: { top: 70, bottom: 170, left: 40, right: 40 }, maxZoom: 10 } /* room for header and replay controls */ } : AUSTRALIA_VIEW}
-      mapStyle={MAP_STYLE_URL}
+      mapStyle={mapStyle}
       attributionControl={false}
       onLoad={onLoad}
       interactiveLayerIds={iconsReady ? [aircraftLayer.id, overviewLayer.id] : []}

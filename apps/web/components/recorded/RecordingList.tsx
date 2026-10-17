@@ -4,6 +4,7 @@ import type { RecordingMeta } from "@aerotrack/shared";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { formatDuration } from "@aerotrack/detectors";
+import { OFFLINE } from "../../lib/config";
 import { loadRecordingList } from "../../lib/recordings";
 
 const when = new Intl.DateTimeFormat("en-AU", {
@@ -24,9 +25,13 @@ export function RecordingList() {
   return (
     <main className="min-h-dvh bg-navy px-4 py-8 text-text">
       <div className="mx-auto max-w-2xl">
-        <Link href="/" className="text-sm text-sky hover:underline">
-          ← Back to live
-        </Link>
+        {OFFLINE ? (
+          <p className="text-sm text-amber">Offline demo mode · live data needs an internet connection</p>
+        ) : (
+          <Link href="/" className="text-sm text-sky hover:underline">
+            ← Back to live
+          </Link>
+        )}
         <h1 className="mt-4 text-2xl font-semibold">Recorded flights</h1>
         <p className="mt-1 text-sm text-muted">
           Real flights captured by AeroTrack. Replays run in your browser, the same way the live insights do.
@@ -46,7 +51,7 @@ export function RecordingList() {
             </li>
           ))}
         </ul>
-        {state?.source === "offline" && (
+        {state?.source === "offline" && !OFFLINE && (
           <p className="mt-6 text-xs text-muted">Showing recordings saved on this device (the live server isn&apos;t reachable).</p>
         )}
       </div>

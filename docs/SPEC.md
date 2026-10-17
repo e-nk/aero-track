@@ -788,7 +788,10 @@ event: status        data: { feedStatus: "ok" | "degraded" | "down", lastPollAt 
 
 ## 13. Offline demo mode
 
-- Env flag `NEXT_PUBLIC_OFFLINE=1` switches the map style to local PMTiles, local fonts and sprites, and disables SSE.
+- Env flag `NEXT_PUBLIC_OFFLINE=1` switches the map style to local PMTiles, local fonts and sprites, and disables SSE. The home page becomes the list of recorded flights ("Offline demo mode · live data needs an internet connection"); photo lookups are skipped; recordings load from `public/recordings`.
+- Assets: `pnpm --filter web offline:assets` (needs the pmtiles CLI on PATH or `PMTILES_BIN`) writes `apps/web/public/offline/` (gitignored, ~41 MB): `sydney.pmtiles` (newest Protomaps daily build, bbox `149.7,-35.0,152.3,-32.8` = the 60 nm live circle plus a margin, maxzoom 13, ~27 MB), `fonts/` (Noto Sans Regular, Medium, Italic, Devanagari) and `sprites/v4/dark*` from `protomaps/basemaps-assets` pinned to commit `028c18f7`.
+- Style: `apps/web/lib/mapStyle.ts` (`@protomaps/basemaps` dark flavor, English labels), tiles through the `pmtiles://` protocol. Outside the extract box the map shows only the background colour (e.g. a followed flight over Queensland in a recording).
+- Verified 2026-10-18: offline production build replaying a recording made 37 requests, all to the local server.
 - Run locally on the demo laptop: `pnpm --filter web build && pnpm --filter web start`.
 - Recordings in `public/recordings` (`index.json` plus one `{id}.json` per recording), copied there with `pnpm --filter api recording:export -- --out ../web/public/recordings ...`.
 - Test with wifi physically off before the demo.

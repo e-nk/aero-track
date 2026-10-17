@@ -6,5 +6,5 @@ coverage/
 !.env.example
 .DS_Store
 
-# Large offline map assets (see docs/SPEC.md section 5.3)
-apps/web/public/offline/*.pmtiles
+# Offline map assets: tiles, fonts, sprites (pnpm --filter web offline:assets, SPEC 5.3)
+apps/web/public/offline/

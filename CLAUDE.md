@@ -23,6 +23,8 @@ Full spec: `docs/SPEC.md`. Read the relevant section before starting any task.
 - `ADSB_USER_AGENT=... pnpm --filter api fetch:sample` (one real adsb.lol request, logged)
 - DB integration tests run when `TEST_DATABASE_URL` is set (it is in `.env.example`); otherwise they skip
 - `pnpm typecheck` / `pnpm lint`
+- `pnpm --filter api recording:export -- --title "..." --from <time> --to <time> [--out ../web/public/recordings]`
+- `pnpm --filter web offline:assets` (pmtiles CLI on PATH or `PMTILES_BIN`), then `NEXT_PUBLIC_OFFLINE=1 pnpm --filter web build && pnpm --filter web start` for the offline demo
 
 ## Non-negotiable rules
 1. Detection is deterministic code in `packages/detectors`. No LLM decides whether an event happened.

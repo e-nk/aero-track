@@ -891,7 +891,7 @@ NEXT_PUBLIC_OFFLINE=0
 - Set web env vars.
 
 **Railway (api + Postgres)**
-- New service from repo. Root directory stays at the repo root (the api imports the workspace packages, which a root of `apps/api` would cut off). Config file path `apps/api/railway.json`, which sets: Railpack builder, start `pnpm --filter api start`, pre-deploy `pnpm --filter api db:migrate`, health check `/health`, watch paths `apps/api/**`, `packages/**`, `pnpm-lock.yaml`, `package.json`, and `numReplicas: 1`.
+- New service from repo. Root directory stays at the repo root (the api imports the workspace packages, which a root of `apps/api` would cut off). Config file `railway.json` at the repo root (Railway reads it there by default), which sets: Railpack builder, start `pnpm --filter api start`, pre-deploy `pnpm --filter api db:migrate`, health check `/health`, watch paths `apps/api/**`, `packages/**`, `pnpm-lock.yaml`, `package.json`, and `numReplicas: 1`.
 - The api runs TypeScript through `tsx`, so `tsx` is a runtime dependency (a production install skips dev dependencies). Verified 2026-10-18 with a clean copy: `pnpm install --frozen-lockfile --prod`, migrate, start, `/health` and CORS all work.
 - Add the Postgres plugin; `DATABASE_URL` is injected.
 - Single instance (the poller must not run twice).

@@ -52,7 +52,7 @@ Useful scripts:
 
 ## Deployment
 
-- **API on Railway**: one service from this repo with the root directory left at the repo root and the config file `apps/api/railway.json` (start command, migrations before each deploy, health check, a single replica). Add the Postgres plugin for `DATABASE_URL`, and set `ADSB_USER_AGENT`, `CORS_ORIGIN` (the Vercel URL), `ADMIN_TOKEN` and optionally the OpenSky keys. Keep exactly one replica: the poller must not run twice.
+- **API on Railway**: one service from this repo with the root directory left at the repo root and the config file `railway.json` at the repo root (start command, migrations before each deploy, health check, a single replica). Add the Postgres plugin for `DATABASE_URL`, and set `ADSB_USER_AGENT`, `CORS_ORIGIN` (the Vercel URL), `ADMIN_TOKEN` and optionally the OpenSky keys. Keep exactly one replica: the poller must not run twice.
 - **Web on Vercel**: import the repo with root directory `apps/web` and set `NEXT_PUBLIC_API_URL` to the Railway URL. Nothing secret goes in `NEXT_PUBLIC_` variables.
 
 Environment variables are listed in `apps/api/.env.example`, `apps/web/.env.example` and SPEC section 17.

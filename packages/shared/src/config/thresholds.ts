@@ -2,8 +2,15 @@
 // Detectors must read numbers from here, never hard-code them.
 
 export interface Thresholds {
-  poll: { intervalMs: number; radiusNm: number; centre: { lat: number; lon: number } };
+  poll: {
+    intervalMs: number;
+    timeoutMs: number;
+    maxBackoffMs: number;
+    radiusNm: number;
+    centre: { lat: number; lon: number };
+  };
   buffer: { keepSec: number };
+  writer: { flushMs: number; maxRows: number };
   hygiene: {
     maxImpliedGsKt: number;
     minPoints: number;
@@ -42,8 +49,15 @@ export interface Thresholds {
 }
 
 export const THRESHOLDS = {
-  poll: { intervalMs: 7000, radiusNm: 60, centre: { lat: -33.9, lon: 151.0 } },
-  buffer: { keepSec: 900 },
+  poll: {
+    intervalMs: 7000,
+    timeoutMs: 5000,
+    maxBackoffMs: 60000, // exponential backoff cap after failures
+    radiusNm: 60,
+    centre: { lat: -33.9, lon: 151.0 },
+  },
+  buffer: { keepSec: 900 }, // also: drop an aircraft this long after its last position
+  writer: { flushMs: 5000, maxRows: 500 }, // batch positions, whichever comes first
   hygiene: {
     maxImpliedGsKt: 1000, // drop position jumps faster than this
     minPoints: 4,

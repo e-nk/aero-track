@@ -378,8 +378,9 @@ All starting values. Tune on recorded data.
 
 ```ts
 export const THRESHOLDS = {
-  poll: { intervalMs: 7000, radiusNm: 60, centre: { lat: -33.9, lon: 151.0 } },
+  poll: { intervalMs: 7000, timeoutMs: 5000, maxBackoffMs: 60000, radiusNm: 60, centre: { lat: -33.9, lon: 151.0 } },
   buffer: { keepSec: 900 },
+  writer: { flushMs: 5000, maxRows: 500 },
   hygiene: {
     maxImpliedGsKt: 1000,       // drop position jumps faster than this
     minPoints: 4,
@@ -538,13 +539,15 @@ export const dHeading = (a: number, b: number) => ((b - a + 540) % 360) - 180; /
 - Confidence: `fact`.
 - Never interpreted. Never sent to the LLM.
 
-### 9.10 Event lifecycle (`apps/api/src/eventEngine.ts`, and mirrored in the replay engine)
+### 9.10 Event lifecycle (`packages/detectors/src/lifecycle.ts`, used by `apps/api/src/eventEngine.ts` and the replay engine)
 - Key: `(hex, type)`. At most one open event per key.
 - Detection present and no open event, and cooldown passed → open event.
 - Detection present and open event → update evidence and `windowEnd`.
 - No detection for `closeAfterSec` → close event.
 - Do not reopen the same key within `reopenCooldownSec`.
-- Never emit an event per poll.
+- Never emit an event per poll. Updates are emitted only when evidence, window or confidence changed; the window only widens.
+- `signal_lost` closes as soon as it is no longer detected (a fresh position arrived), not after `closeAfterSec`.
+- When an aircraft leaves the buffer, all its open events close.
 
 ## 10. Explanation templates (`packages/detectors/src/explain.ts`)
 
@@ -569,7 +572,9 @@ Card labels: "What we see", "What this commonly means", "What we can't tell". Pl
 ### 11.1 Poller
 - `setInterval` with drift guard; never overlap requests (skip tick if previous in flight).
 - Timeout 5 s via AbortController.
-- On failure (network error, timeout, non-2xx, 429, or a body that isn't JSON): exponential backoff up to 60 s, set `feedStatus = "down"`, broadcast status. Keep last known states. A 429 is an HTML page with no `Retry-After`, so never parse it as data.
+- `feedStatus` starts as `degraded` until the first successful poll, then `ok`.
+- The next poll is scheduled when the current one finishes (interval minus the time it took), so polls never overlap. The provider's `now` drives detection, not the server clock.
+- On failure (network error, timeout, non-2xx, 429, or a body that isn't JSON): exponential backoff (`interval × 2^failures`) up to 60 s, set `feedStatus = "down"`, broadcast status. Keep last known states. A 429 is an HTML page with no `Retry-After`, so never parse it as data.
 - Exactly one poller per process, including in dev (guard against hot-reload starting a second one).
 - The adapter drops category C1-C7 (ground vehicles and obstacles) and type `TWR` (towers), and aircraft without `lat`/`lon`/`seen_pos` (position time unknown). Missing `emergency` maps to null, not `none`.
 - Manual check: `ADSB_USER_AGENT=... pnpm --filter api fetch:sample` makes one real request through client, schema and adapter and logs the result.
@@ -578,15 +583,16 @@ Card labels: "What we see", "What this commonly means", "What we can't tell". Pl
 ### 11.2 Ring buffer
 - `Map<hex, Observation[]>`, trim to `buffer.keepSec`.
 - Ignore observations whose `t` is not newer than the last stored `t` for that hex.
-- On startup, hydrate the last 15 min from Postgres so detectors have history immediately.
+- On startup, hydrate the last 15 min from Postgres so detectors have history immediately. Open events are continued (`EventLifecycle.restore`); open events for aircraft no longer in the window are closed. `emergency` is not stored, so it is null until the next poll.
 
 ### 11.3 Event engine
 - After each poll, for every hex in the buffer (including ones missing from this poll, for signal loss): `runAll(track, ctx)`, then apply lifecycle, then build explanation, then persist and broadcast changes.
 - Drop aircraft from the buffer 15 min after last position.
 
 ### 11.4 Writer
-- Batch insert positions every 5 s or 500 rows, whichever first.
+- Batch insert positions every 5 s or 500 rows, whichever first. Aircraft and event upserts ride the same flush (latest version per key).
 - Events upserted on change.
+- On a failed write the batch is re-queued (writes are idempotent). Queued positions are capped at 20 × maxRows; the oldest are dropped with a warning.
 
 ### 11.5 Retention job
 - Every 30 min: delete live positions older than 24 h. Never delete positions referenced by a saved recording window (recordings are exported to JSON anyway).
@@ -597,7 +603,7 @@ Card labels: "What we see", "What this commonly means", "What we can't tell". Pl
 aircraft: hex (pk text), callsign, registration, type_code, type_desc, category, last_seen_at (timestamptz)
 positions: id (bigserial pk), hex, t (timestamptz), lat, lon, alt_ft (int null), on_ground (bool),
            gs_kt (real null), track_deg (real null), baro_rate_fpm (int null), squawk (text null), mode (text)
-           index (hex, t), index (t)
+           unique index (hex, t) (re-inserting a position is a no-op), index (t)
 events: id (uuid pk), hex, type, confidence, status, mode, window_start, window_end,
         evidence (jsonb), explanation (jsonb), explanation_source, opened_at, updated_at, closed_at
         index (hex, opened_at), index (status)
@@ -611,7 +617,7 @@ recordings: id (text pk), title, source, attribution, captured_from, captured_to
 | GET | `/health` | `{ ok, feedStatus, lastPollAt, aircraftCount }` |
 | GET | `/api/aircraft` | Current snapshot: `AircraftState[]` |
 | GET | `/api/aircraft/:hex` | `{ state, openEvents, recentEvents }` |
-| GET | `/api/aircraft/:hex/track?minutes=15` | `Observation[]` segmented: `{ segments: Observation[][] }` |
+| GET | `/api/aircraft/:hex/track?minutes=15` | `{ segments: Observation[][] }` from the in-memory buffer (minutes 1-15), cleaned and split at gaps by `preprocess` |
 | GET | `/api/events?hex=&status=&since=` | `BehaviourEvent[]` |
 | GET | `/api/search?q=` | Matches by callsign, registration, type, or flight number via prefix. Each with `freshness`: `live`, `last_seen_<n>m`, `not_seen` |
 | GET | `/api/recordings` | List of recordings metadata |

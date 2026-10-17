@@ -63,3 +63,6 @@ export interface BehaviourEvent extends Detection {
   updatedAt: number;
   closedAt: number | null;
 }
+
+/** Live feed health. "degraded" until the first successful poll. */
+export type FeedStatus = "ok" | "degraded" | "down";

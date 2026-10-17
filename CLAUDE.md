@@ -14,10 +14,14 @@ Full spec: `docs/SPEC.md`. Read the relevant section before starting any task.
 
 ## Commands
 - `pnpm install`
+- `docker compose up -d` (local Postgres on port 5433; also creates `aerotrack_test`)
+- `cp apps/api/.env.example apps/api/.env` then set `ADSB_USER_AGENT`
 - `pnpm dev` (all apps) / `pnpm --filter web dev` / `pnpm --filter api dev`
 - `pnpm test` (Vitest, all packages)
 - `pnpm --filter detectors test --watch`
 - `pnpm --filter api db:generate` / `db:migrate` (Drizzle)
+- `ADSB_USER_AGENT=... pnpm --filter api fetch:sample` (one real adsb.lol request, logged)
+- DB integration tests run when `TEST_DATABASE_URL` is set (it is in `.env.example`); otherwise they skip
 - `pnpm typecheck` / `pnpm lint`
 
 ## Non-negotiable rules

@@ -161,6 +161,7 @@ const app = buildApp({
   hub,
   sightings,
   follows,
+  adminToken: env.ADMIN_TOKEN,
   onFollowsChanged: () => void saveFollows(),
   overview: overviewPoller ? { store: overviewStore, status: overviewPoller.status } : null,
   status: poller.status,

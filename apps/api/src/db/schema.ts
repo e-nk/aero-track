@@ -1,4 +1,4 @@
-import type { Explanation } from "@aerotrack/shared";
+import type { Explanation, RecordingFile } from "@aerotrack/shared";
 import {
   bigserial,
   boolean,
@@ -78,7 +78,9 @@ export const recordings = pgTable("recordings", {
   attribution: text("attribution").notNull(),
   capturedFrom: ts("captured_from").notNull(),
   capturedTo: ts("captured_to").notNull(),
-  fileUrl: text("file_url").notNull(),
+  aircraftCount: integer("aircraft_count").notNull(),
+  // The whole recording (SPEC 8). Recordings are small (a few hundred KB), so no file host.
+  data: jsonb("data").$type<RecordingFile>().notNull(),
   reportedCause: jsonb("reported_cause").$type<{ text: string; sourceUrl: string; sourceName: string }>(),
   createdAt: ts("created_at").notNull().defaultNow(),
 });

@@ -1,0 +1,36 @@
+[
+  {
+    "id": "2026-10-17-late-night-landing-and-take-off-at-sydney-airport",
+    "title": "Late-night landing and take-off at Sydney Airport",
+    "mode": "recorded",
+    "source": "ADSB.lol live capture",
+    "attribution": "Data: ADSB.lol (ODbL)",
+    "capturedFrom": 1792241100,
+    "capturedTo": 1792242900,
+    "bbox": [
+      146.693149,
+      -34.113713,
+      151.359043,
+      -20.228484
+    ],
+    "reportedCause": null,
+    "aircraftCount": 8
+  },
+  {
+    "id": "2026-10-17-evening-traffic-over-sydney",
+    "title": "Evening traffic over Sydney",
+    "mode": "recorded",
+    "source": "ADSB.lol live capture",
+    "attribution": "Data: ADSB.lol (ODbL)",
+    "capturedFrom": 1792225500,
+    "capturedTo": 1792226700,
+    "bbox": [
+      149.811756,
+      -34.46886,
+      152.191586,
+      -32.905077
+    ],
+    "reportedCause": null,
+    "aircraftCount": 32
+  }
+]

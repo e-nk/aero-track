@@ -1,11 +1,11 @@
-import type { AircraftState, BehaviourEvent, Confidence, DataMode, EventType } from "@aerotrack/shared";
-import { and, asc, count, desc, eq, gte, inArray, min, sql } from "drizzle-orm";
+import type { AircraftState, BehaviourEvent, Confidence, DataMode, EventType, RecordingFile, RecordingMeta } from "@aerotrack/shared";
+import { and, asc, count, desc, eq, gte, inArray, lte, min, sql } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import type { PositionRow, Repo } from "../repo";
 import type { FollowEntry } from "../follows";
 import type { Sighting } from "../sightings";
 import type { Db } from "./client";
-import { aircraft, events, follows, positions, sightings } from "./schema";
+import { aircraft, events, follows, positions, recordings, sightings } from "./schema";
 
 // Keeps each insert well under Postgres' 65,535 bind-parameter limit.
 const CHUNK = 1000;
@@ -39,6 +39,21 @@ const sightingFromRow = (r: SightingRow): Sighting => ({
 });
 
 const optDate = (sec: number | null) => (sec === null ? null : toDate(sec));
+
+const positionFromRow = (r: typeof positions.$inferSelect) => ({
+  hex: r.hex,
+  squawk: r.squawk,
+  obs: {
+    t: toSec(r.t),
+    lat: r.lat,
+    lon: r.lon,
+    altFt: r.altFt,
+    onGround: r.onGround,
+    gsKt: r.gsKt,
+    trackDeg: r.trackDeg,
+    baroRateFpm: r.baroRateFpm,
+  },
+});
 
 function eventFromRow(r: EventRow): BehaviourEvent {
   return {
@@ -152,26 +167,48 @@ export function createPgRepo(db: Db): Repo {
       }
     },
 
+    async loadPositionsBetween(fromSec: number, toSec: number) {
+      const rows = await db
+        .select()
+        .from(positions)
+        .where(and(eq(positions.mode, "live"), gte(positions.t, toDate(fromSec)), lte(positions.t, toDate(toSec))))
+        .orderBy(asc(positions.t));
+      return rows.map(positionFromRow);
+    },
+
+    async saveRecording(rec: RecordingFile) {
+      const row = {
+        id: rec.id,
+        title: rec.title,
+        source: rec.source,
+        attribution: rec.attribution,
+        capturedFrom: toDate(rec.capturedFrom),
+        capturedTo: toDate(rec.capturedTo),
+        aircraftCount: rec.aircraft.length,
+        data: rec,
+        reportedCause: rec.reportedCause,
+      };
+      const { id: _id, ...update } = row;
+      await db.insert(recordings).values(row).onConflictDoUpdate({ target: recordings.id, set: update });
+    },
+
+    async listRecordings(): Promise<RecordingMeta[]> {
+      const rows = await db.select({ data: recordings.data, aircraftCount: recordings.aircraftCount }).from(recordings).orderBy(desc(recordings.capturedFrom));
+      return rows.map(({ data: { aircraft: _aircraft, ...meta }, aircraftCount }) => ({ ...meta, aircraftCount }));
+    },
+
+    async getRecording(id: string) {
+      const [row] = await db.select({ data: recordings.data }).from(recordings).where(eq(recordings.id, id));
+      return row?.data ?? null;
+    },
+
     async loadPositionsSince(sinceSec: number) {
       const rows = await db
         .select()
         .from(positions)
         .where(and(eq(positions.mode, "live"), gte(positions.t, toDate(sinceSec))))
         .orderBy(asc(positions.t));
-      return rows.map((r) => ({
-        hex: r.hex,
-        squawk: r.squawk,
-        obs: {
-          t: toSec(r.t),
-          lat: r.lat,
-          lon: r.lon,
-          altFt: r.altFt,
-          onGround: r.onGround,
-          gsKt: r.gsKt,
-          trackDeg: r.trackDeg,
-          baroRateFpm: r.baroRateFpm,
-        },
-      }));
+      return rows.map(positionFromRow);
     },
 
     async loadAircraft(hexes: string[]) {

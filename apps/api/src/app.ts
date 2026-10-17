@@ -10,13 +10,19 @@ import type { SightingTracker } from "./sightings";
 import type { SseHub } from "./sse";
 import { aircraftRoutes } from "./routes/aircraft";
 import { followRoutes } from "./routes/follows";
+import { recordingRoutes } from "./routes/recordings";
 import { healthRoutes } from "./routes/health";
 import { streamRoutes } from "./routes/stream";
 
 export interface AppDeps {
   store: AircraftStore;
   lifecycle: EventLifecycle;
-  repo: Pick<Repo, "recentEvents" | "sightingSummary">;
+  repo: Pick<
+    Repo,
+    "recentEvents" | "sightingSummary" | "listRecordings" | "getRecording" | "saveRecording" | "loadPositionsBetween" | "loadAircraft"
+  >;
+  /** Enables POST /api/recordings; unset = switched off. */
+  adminToken?: string;
   hub: SseHub;
   sightings: SightingTracker;
   follows: FollowList;
@@ -38,6 +44,7 @@ export function buildApp(deps: AppDeps) {
   app.register(aircraftRoutes(deps), { prefix: "/api" });
   app.register(streamRoutes(deps), { prefix: "/api" });
   app.register(followRoutes(deps), { prefix: "/api" });
+  app.register(recordingRoutes(deps), { prefix: "/api" });
   // Open SSE streams would otherwise keep the server from closing.
   app.addHook("preClose", async () => deps.hub.closeAll());
   return app;

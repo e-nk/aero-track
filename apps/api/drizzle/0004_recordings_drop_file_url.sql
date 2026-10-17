@@ -1,0 +1,1 @@
+ALTER TABLE "recordings" DROP COLUMN "file_url";

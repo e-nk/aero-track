@@ -1,5 +1,6 @@
 import type { AircraftState, BehaviourEvent } from "@aerotrack/shared";
 import type { PositionRow, Repo } from "../src/repo";
+import type { RecordingFile, RecordingMeta } from "@aerotrack/shared";
 import type { FollowEntry } from "../src/follows";
 import type { Sighting } from "../src/sightings";
 
@@ -10,6 +11,7 @@ export class FakeRepo implements Repo {
   events = new Map<string, BehaviourEvent>();
   sightings = new Map<string, Sighting>();
   follows: FollowEntry[] = [];
+  recordings = new Map<string, RecordingFile>();
   calls: string[] = [];
   failNext = 0;
 
@@ -54,6 +56,24 @@ export class FakeRepo implements Repo {
   }
   async loadFollows() {
     return this.follows.map((f) => ({ ...f }));
+  }
+  async loadPositionsBetween(fromSec: number, toSec: number) {
+    return this.positions
+      .filter((p) => p.mode === "live" && p.obs.t >= fromSec && p.obs.t <= toSec)
+      .sort((a, b) => a.obs.t - b.obs.t)
+      .map(({ hex, obs, squawk }) => ({ hex, obs, squawk }));
+  }
+  async saveRecording(rec: RecordingFile) {
+    this.maybeFail("saveRecording");
+    this.recordings.set(rec.id, rec);
+  }
+  async listRecordings(): Promise<RecordingMeta[]> {
+    return [...this.recordings.values()]
+      .sort((a, b) => b.capturedFrom - a.capturedFrom)
+      .map(({ aircraft, ...meta }) => ({ ...meta, aircraftCount: aircraft.length }));
+  }
+  async getRecording(id: string) {
+    return this.recordings.get(id) ?? null;
   }
   async loadPositionsSince(sinceSec: number) {
     return this.positions.filter((p) => p.obs.t >= sinceSec).sort((a, b) => a.obs.t - b.obs.t);

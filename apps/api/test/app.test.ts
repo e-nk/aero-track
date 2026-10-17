@@ -10,7 +10,10 @@ import { SseHub } from "../src/sse";
 import { FakeRepo } from "./fakeRepo";
 import { T0, obs, state } from "./helpers";
 
-function setup(status: PollerStatus = { feedStatus: "ok", lastPollAt: T0 * 1000, consecutiveFailures: 0 }) {
+function setup(
+  status: PollerStatus = { feedStatus: "ok", lastPollAt: T0 * 1000, consecutiveFailures: 0 },
+  adminToken: string | undefined = "s3cret-token",
+) {
   const store = new AircraftStore(THRESHOLDS);
   const repo = new FakeRepo();
   const lifecycle = new EventLifecycle({ thresholds: THRESHOLDS, mode: "live", newId: () => "ev-1" });
@@ -26,6 +29,7 @@ function setup(status: PollerStatus = { feedStatus: "ok", lastPollAt: T0 * 1000,
     follows,
     sightings,
     overview: null,
+    adminToken,
     status: () => status,
     nowSec: () => now,
     corsOrigin: ["http://localhost:3000"],
@@ -205,6 +209,53 @@ describe("api routes", () => {
     });
     expect(res.headers["access-control-allow-methods"]).toMatch(/POST/);
     expect(res.headers["access-control-allow-methods"]).toMatch(/DELETE/);
+  });
+
+  describe("recordings", () => {
+    const post = (app: ReturnType<typeof setup>["app"], body: unknown, token?: string) =>
+      app.inject({ method: "POST", url: "/api/recordings", payload: body as object, headers: token ? { "x-admin-token": token } : {} });
+
+    it("lists recordings and serves one in full", async () => {
+      const { app, repo } = setup();
+      close = () => app.close();
+      await repo.insertPositions([{ hex: "7c0001", obs: obs(T0), squawk: null, mode: "live" }]);
+      const created = await post(app, { title: "Morning", from: T0 - 10, to: T0 + 10 }, "s3cret-token");
+      expect(created.statusCode).toBe(201);
+      const id = created.json().id;
+      expect(id).toBe("2026-10-17-morning");
+
+      const list = (await app.inject("/api/recordings")).json();
+      expect(list).toHaveLength(1);
+      expect(list[0]).toMatchObject({ id, title: "Morning", aircraftCount: 1 });
+      expect(list[0]).not.toHaveProperty("aircraft");
+
+      const full = (await app.inject(`/api/recordings/${id}`)).json();
+      expect(full.aircraft[0].points).toHaveLength(1);
+      expect((await app.inject("/api/recordings/nope")).statusCode).toBe(404);
+    });
+
+    it("refuses to create without the right admin token", async () => {
+      const { app } = setup();
+      close = () => app.close();
+      expect((await post(app, { title: "X", from: T0, to: T0 + 60 })).statusCode).toBe(401);
+      expect((await post(app, { title: "X", from: T0, to: T0 + 60 }, "wrong")).statusCode).toBe(401);
+    });
+
+    it("is switched off when no admin token is configured", async () => {
+      const { app } = setup(undefined, "");
+      close = () => app.close();
+      expect((await post(app, { title: "X", from: T0, to: T0 + 60 }, "anything")).statusCode).toBe(403);
+    });
+
+    it("validates the window and says when it is empty", async () => {
+      const { app } = setup();
+      close = () => app.close();
+      expect((await post(app, { title: "X", from: T0 + 60, to: T0 }, "s3cret-token")).statusCode).toBe(400);
+      expect((await post(app, { title: "", from: T0, to: T0 + 60 }, "s3cret-token")).statusCode).toBe(400);
+      const empty = await post(app, { title: "X", from: T0, to: T0 + 60 }, "s3cret-token");
+      expect(empty.statusCode).toBe(422);
+      expect(empty.json().message).toBe("No positions in that window");
+    });
   });
 
   it("allows the configured CORS origin only", async () => {

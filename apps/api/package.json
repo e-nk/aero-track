@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "fetch:sample": "tsx scripts/fetch-sample.ts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/db/migrate.ts"
+    "db:migrate": "tsx src/db/migrate.ts",
+    "recording:export": "tsx scripts/export-recording.ts"
   },
   "dependencies": {
     "@aerotrack/detectors": "workspace:*",

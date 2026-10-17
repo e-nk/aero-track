@@ -7,6 +7,7 @@ import { createDb } from "../../src/db/client";
 import { runMigrations } from "../../src/db/migrate";
 import { createPgRepo } from "../../src/db/repo";
 import { loadDotEnv } from "../../src/env";
+import { buildRecording } from "../../src/recordings/export";
 import type { Sighting } from "../../src/sightings";
 import { T0, obs, state } from "../helpers";
 
@@ -153,6 +154,32 @@ describe.skipIf(!url)("Postgres repo", () => {
     expect(await repo.loadFollows()).toEqual([{ hex: "7c0002", addedAt: T0 + 1.5, landedAt: T0 + 600 }]);
     await repo.saveFollows([]);
     expect(await repo.loadFollows()).toEqual([]);
+  });
+
+  it("loads live positions between two times, oldest first", async () => {
+    await repo.insertPositions([
+      { hex: "7c0001", obs: obs(T0), squawk: null, mode: "live" },
+      { hex: "7c0001", obs: obs(T0 + 60), squawk: "1000", mode: "live" },
+      { hex: "7c0001", obs: obs(T0 + 120), squawk: null, mode: "live" },
+      { hex: "7c0002", obs: obs(T0 + 30), squawk: null, mode: "recorded" },
+    ]);
+    expect((await repo.loadPositionsBetween(T0, T0 + 60)).map((r) => r.obs.t)).toEqual([T0, T0 + 60]);
+  });
+
+  it("saves, lists and loads recordings", async () => {
+    const rec = buildRecording({
+      title: "Window",
+      from: T0,
+      to: T0 + 600,
+      rows: [{ hex: "7c0001", obs: obs(T0), squawk: null }],
+      identities: [],
+    });
+    await repo.saveRecording(rec);
+    await repo.saveRecording({ ...rec, title: "Window (renamed)" });
+    expect(await repo.getRecording(rec.id)).toEqual({ ...rec, title: "Window (renamed)" });
+    expect(await repo.getRecording("nope")).toBeNull();
+    const { aircraft: _aircraft, ...meta } = rec;
+    expect(await repo.listRecordings()).toEqual([{ ...meta, title: "Window (renamed)", aircraftCount: 1 }]);
   });
 
   it("accepts empty batches", async () => {

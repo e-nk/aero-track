@@ -891,7 +891,15 @@ NEXT_PUBLIC_OFFLINE=0
 - Set web env vars.
 
 **Railway (api + Postgres)**
-- New service from repo. Root directory stays at the repo root (the api imports the workspace packages, which a root of `apps/api` would cut off). Config file `railway.json` at the repo root (Railway reads it there by default), which sets: Railpack builder, start `pnpm --filter api start`, pre-deploy `pnpm --filter api db:migrate`, health check `/health`, watch paths `apps/api/**`, `packages/**`, `pnpm-lock.yaml`, `package.json`, and `numReplicas: 1`.
+- New service from the GitHub repo (auto-deploys on push to `main`). Root directory stays at the repo root: the api imports the workspace packages, which a root of `apps/api` would cut off.
+- Service settings are set on the service itself (dashboard, or the `serviceInstanceUpdate` API), not in a file:
+  - build command `echo 'The api runs from TypeScript source with tsx; nothing to build.'` (otherwise Railpack runs the root `pnpm build` and builds the web app too)
+  - start `pnpm --filter api start`
+  - pre-deploy `pnpm --filter api db:migrate`
+  - health check `/health` (timeout 120 s)
+  - 1 replica, restart on failure (5 retries)
+  - watch paths `apps/api/**`, `packages/**`, `pnpm-lock.yaml`, `package.json`
+- Verified 2026-10-18: Railway ignores `railway.json` for new services ("Config as Code (railway.json / railway.toml) is deprecated. Use Infrastructure as Code (.railway/railway.ts) instead."; existing services stop reading it on 2026-12-01). The first deploy therefore guessed its own start command, skipped migrations and crashed on the missing tables. Decided: keep the settings on the service rather than adopt `.railway/railway.ts`, which isn't applied on push.
 - The api runs TypeScript through `tsx`, so `tsx` is a runtime dependency (a production install skips dev dependencies). Verified 2026-10-18 with a clean copy: `pnpm install --frozen-lockfile --prod`, migrate, start, `/health` and CORS all work.
 - Add the Postgres plugin; `DATABASE_URL` is injected.
 - Single instance (the poller must not run twice).

@@ -52,7 +52,7 @@ Useful scripts:
 
 ## Deployment
 
-- **API on Railway**: one service from this repo with the root directory left at the repo root and the config file `railway.json` at the repo root (start command, migrations before each deploy, health check, a single replica). Add the Postgres plugin for `DATABASE_URL`, and set `ADSB_USER_AGENT`, `CORS_ORIGIN` (the Vercel URL), `ADMIN_TOKEN` and optionally the OpenSky keys. Keep exactly one replica: the poller must not run twice.
+- **API on Railway**: one service from this GitHub repo, root directory left at the repo root, plus the Postgres plugin (`DATABASE_URL=${{Postgres.DATABASE_URL}}`). Service settings (Railway no longer reads `railway.json` for new services): build command `echo nothing to build`, start `pnpm --filter api start`, pre-deploy `pnpm --filter api db:migrate`, health check `/health`, exactly one replica (the poller must not run twice). Variables: `ADSB_USER_AGENT`, `CORS_ORIGIN` (the Vercel URL), `ADMIN_TOKEN`, and optionally the OpenSky keys.
 - **Web on Vercel**: import the repo with root directory `apps/web` and set `NEXT_PUBLIC_API_URL` to the Railway URL. Nothing secret goes in `NEXT_PUBLIC_` variables.
 
 Environment variables are listed in `apps/api/.env.example`, `apps/web/.env.example` and SPEC section 17.

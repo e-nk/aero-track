@@ -11,6 +11,7 @@ import { hydrate } from "./hydrate";
 import { createPipeline } from "./pipeline";
 import { createPoller } from "./poller";
 import { ProviderError, createAdsbLolClient } from "./providers/adsblol/client";
+import { SightingTracker } from "./sightings";
 import { SseHub } from "./sse";
 import { changeMessages, snapshotMessage, statusMessage } from "./streamMessages";
 import { createWriter } from "./writer";
@@ -24,6 +25,12 @@ const store = new AircraftStore(THRESHOLDS);
 const lifecycle = new EventLifecycle({ thresholds: THRESHOLDS, mode: "live", newId: randomUUID });
 const engine = createEventEngine({ store, lifecycle, thresholds: THRESHOLDS });
 const hub = new SseHub(THRESHOLDS.sse);
+// Continue sightings still open before a restart (same window as the buffer).
+const sightings = new SightingTracker({
+  keepSec: THRESHOLDS.buffer.keepSec,
+  newId: randomUUID,
+  seed: await repo.loadOpenSightings(Date.now() / 1000 - THRESHOLDS.buffer.keepSec),
+});
 
 // Provider clock of the latest successful poll; drives track windows.
 let lastPollNow: number | null = null;
@@ -67,6 +74,7 @@ const app = buildApp({
   lifecycle,
   repo,
   hub,
+  sightings,
   status: poller.status,
   nowSec,
   corsOrigin: env.CORS_ORIGIN,
@@ -74,7 +82,7 @@ const app = buildApp({
 });
 
 const writer = createWriter(repo, THRESHOLDS.writer, app.log);
-const pipeline = createPipeline({ store, engine, writer });
+const pipeline = createPipeline({ store, engine, writer, sightings });
 const client = createAdsbLolClient({
   baseUrl: env.ADSB_BASE_URL,
   userAgent: env.ADSB_USER_AGENT,

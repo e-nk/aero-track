@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { AppDeps } from "../app";
 
 const RECENT_EVENTS_LIMIT = 20;
+const SIGHTING_WINDOW_SEC = 7 * 86400;
 const MAX_TRACK_MINUTES = THRESHOLDS.buffer.keepSec / 60; // the buffer holds 15 minutes
 
 const HexParams = z.object({ hex: z.string().min(1) });
@@ -19,8 +20,22 @@ const notFound = (reply: FastifyReply) =>
   });
 
 export const aircraftRoutes =
-  ({ store, lifecycle, repo, nowSec }: AppDeps): FastifyPluginAsync =>
+  ({ store, lifecycle, repo, sightings, nowSec }: AppDeps): FastifyPluginAsync =>
   async (app) => {
+    /** Counts from the database, plus the current sighting if it hasn't been written yet. */
+    async function sightingCounts(hex: string) {
+      const since = nowSec() - SIGHTING_WINDOW_SEC;
+      const summary = await repo.sightingSummary(hex, since);
+      const open = sightings.current(hex);
+      const unsaved = open && !summary.recentIds.includes(open.id) ? open : null;
+      const firstSeenAt = [summary.firstSeenAt, unsaved?.startedAt].filter((t): t is number => t != null);
+      return {
+        last7Days: summary.recentIds.length + (unsaved ? 1 : 0),
+        total: summary.total + (unsaved ? 1 : 0),
+        firstSeenAt: firstSeenAt.length ? Math.min(...firstSeenAt) : null,
+      };
+    }
+
     app.get("/aircraft", async () => store.all());
 
     app.get("/aircraft/:hex", async (req, reply) => {
@@ -33,6 +48,7 @@ export const aircraftRoutes =
         history: preprocess(store.track(hex), THRESHOLDS).status,
         openEvents: lifecycle.openEvents(hex),
         recentEvents: await repo.recentEvents(hex, RECENT_EVENTS_LIMIT),
+        sightings: await sightingCounts(hex),
       };
     });
 

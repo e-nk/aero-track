@@ -7,6 +7,7 @@ import { createDb } from "../../src/db/client";
 import { runMigrations } from "../../src/db/migrate";
 import { createPgRepo } from "../../src/db/repo";
 import { loadDotEnv } from "../../src/env";
+import type { Sighting } from "../../src/sightings";
 import { T0, obs, state } from "../helpers";
 
 loadDotEnv();
@@ -38,7 +39,7 @@ describe.skipIf(!url)("Postgres repo", () => {
     await runMigrations(url!);
   });
   beforeEach(async () => {
-    await db.execute(sql`truncate positions, aircraft, events, recordings restart identity`);
+    await db.execute(sql`truncate positions, aircraft, events, recordings, sightings restart identity`);
   });
   afterAll(async () => {
     await close();
@@ -108,10 +109,46 @@ describe.skipIf(!url)("Postgres repo", () => {
     expect((await repo.recentEvents("7c0001", 2)).map((e) => e.id.slice(-1))).toEqual(["3", "2"]);
   });
 
+  const sighting = (id: string, startedAt: number, patch: Partial<Sighting> = {}): Sighting => ({
+    id,
+    hex: "7c0001",
+    startedAt,
+    lastSeenAt: startedAt + 600,
+    tookOffAt: null,
+    takeoffAirport: null,
+    landedAt: null,
+    landingAirport: null,
+    ...patch,
+  });
+
+  it("upserts sightings and summarises them for one aircraft", async () => {
+    const DAY = 86400;
+    await repo.upsertSightings([
+      sighting("6b1f8c2e-0000-4000-8000-0000000000a1", T0 - 10 * DAY),
+      sighting("6b1f8c2e-0000-4000-8000-0000000000a2", T0 - 2 * DAY, { tookOffAt: T0 - 2 * DAY + 30, takeoffAirport: "YSSY" }),
+      sighting("6b1f8c2e-0000-4000-8000-0000000000a3", T0 - DAY),
+      sighting("6b1f8c2e-0000-4000-8000-0000000000b1", T0 - DAY, { hex: "7c0002" }),
+    ]);
+    await repo.upsertSightings([sighting("6b1f8c2e-0000-4000-8000-0000000000a3", T0 - DAY, { lastSeenAt: T0 })]);
+
+    const summary = await repo.sightingSummary("7c0001", T0 - 7 * DAY);
+    expect(summary.total).toBe(3);
+    expect(summary.firstSeenAt).toBe(T0 - 10 * DAY);
+    expect(summary.recentIds.sort()).toEqual(["6b1f8c2e-0000-4000-8000-0000000000a2", "6b1f8c2e-0000-4000-8000-0000000000a3"]);
+    expect(await repo.sightingSummary("7cffff", 0)).toEqual({ total: 0, firstSeenAt: null, recentIds: [] });
+  });
+
+  it("loads sightings still open (seen since a time) to continue after a restart", async () => {
+    const open = sighting("6b1f8c2e-0000-4000-8000-0000000000c1", T0, { lastSeenAt: T0 + 600, landedAt: T0 + 500, landingAirport: "YSBK" });
+    await repo.upsertSightings([open, sighting("6b1f8c2e-0000-4000-8000-0000000000c2", T0 - 5000, { lastSeenAt: T0 - 4000 })]);
+    expect(await repo.loadOpenSightings(T0)).toEqual([open]);
+  });
+
   it("accepts empty batches", async () => {
     await repo.insertPositions([]);
     await repo.upsertAircraft([]);
     await repo.upsertEvents([]);
+    await repo.upsertSightings([]);
     expect(await repo.loadAircraft([])).toEqual([]);
   });
 });

@@ -82,3 +82,19 @@ export const recordings = pgTable("recordings", {
   reportedCause: jsonb("reported_cause").$type<{ text: string; sourceUrl: string; sourceName: string }>(),
   createdAt: ts("created_at").notNull().defaultNow(),
 });
+
+// "Seen by AeroTrack" (SPEC 11.9). Never deleted by retention.
+export const sightings = pgTable(
+  "sightings",
+  {
+    id: uuid("id").primaryKey(),
+    hex: text("hex").notNull(),
+    startedAt: ts("started_at").notNull(),
+    lastSeenAt: ts("last_seen_at").notNull(),
+    tookOffAt: ts("took_off_at"),
+    takeoffAirport: text("takeoff_airport"),
+    landedAt: ts("landed_at"),
+    landingAirport: text("landing_airport"),
+  },
+  (table) => [index("sightings_hex_started_at_idx").on(table.hex, table.startedAt), index("sightings_last_seen_at_idx").on(table.lastSeenAt)],
+);

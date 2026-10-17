@@ -1,5 +1,6 @@
 import type { AircraftState, BehaviourEvent, Observation } from "@aerotrack/shared";
 import { API_URL } from "./config";
+import type { SightingCounts } from "./format";
 
 export type HistoryStatus = "ok" | "insufficient_history";
 
@@ -8,6 +9,7 @@ export interface AircraftDetail {
   history: HistoryStatus;
   openEvents: BehaviourEvent[];
   recentEvents: BehaviourEvent[];
+  sightings?: SightingCounts;
 }
 
 const url = (path: string) => `${API_URL}${path}`;

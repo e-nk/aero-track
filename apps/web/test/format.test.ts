@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   NOT_AVAILABLE,
   displayAltitude,
+  formatSightings,
   formatAge,
   formatHeading,
   formatSpeed,
@@ -62,5 +63,21 @@ describe("displayed altitude", () => {
   it("says on the ground, or not available", () => {
     expect(displayAltitude({ altFt: 0, altGeomFt: 150, onGround: true })).toEqual({ text: "On the ground", ft: 0, note: null });
     expect(displayAltitude({ altFt: null, altGeomFt: null, onGround: false })).toEqual({ text: NOT_AVAILABLE, ft: null, note: null });
+  });
+});
+
+describe("sightings", () => {
+  const firstSeenAt = 1_792_200_000; // 17 Oct 2026 in Sydney
+  it("counts in plain words with an honest note", () => {
+    expect(formatSightings({ last7Days: 3, total: 5, firstSeenAt })).toEqual({
+      text: "3 times in the last 7 days",
+      note: "Counts only what our coverage showed, since 17 Oct 2026. Not a full flight history.",
+    });
+    expect(formatSightings({ last7Days: 1, total: 1, firstSeenAt })?.text).toBe("Once in the last 7 days");
+  });
+
+  it("handles no data", () => {
+    expect(formatSightings(undefined)).toBeNull();
+    expect(formatSightings({ last7Days: 0, total: 0, firstSeenAt: null })).toBeNull();
   });
 });

@@ -1,3 +1,5 @@
+import { DISPLAY_TIME_ZONE } from "@aerotrack/shared";
+
 // Details panel formatting (SPEC 12.4). Plain English; missing values say so.
 export const NOT_AVAILABLE = "Not available from this source";
 
@@ -51,4 +53,26 @@ export function formatAge(sec: number): string {
 export function formatType(typeCode: string | null, typeDesc: string | null): string {
   if (!typeCode) return NOT_AVAILABLE;
   return typeDesc ? `${typeCode} · ${typeDesc}` : typeCode;
+}
+
+export interface SightingCounts {
+  last7Days: number;
+  total: number;
+  firstSeenAt: number | null;
+}
+
+const dateFormat = new Intl.DateTimeFormat("en-AU", {
+  timeZone: DISPLAY_TIME_ZONE,
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+/** "Seen by AeroTrack" (SPEC 11.9). Null when we have nothing to say. */
+export function formatSightings(s: SightingCounts | undefined): { text: string; note: string } | null {
+  if (!s || s.total === 0 || s.firstSeenAt === null) return null;
+  const text =
+    s.last7Days === 0 ? "Not in the last 7 days" : s.last7Days === 1 ? "Once in the last 7 days" : `${s.last7Days} times in the last 7 days`;
+  const since = dateFormat.format(new Date(s.firstSeenAt * 1000));
+  return { text, note: `Counts only what our coverage showed, since ${since}. Not a full flight history.` };
 }

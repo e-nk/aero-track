@@ -64,6 +64,16 @@ describe("writer", () => {
     expect(repo.calls.filter((c) => c === "upsertEvents")).toHaveLength(1);
   });
 
+  it("writes the latest version of each sighting", async () => {
+    const repo = new FakeRepo();
+    const w = createWriter(repo, opts, silent);
+    const s = { id: "s1", hex: "7c0001", startedAt: T0, lastSeenAt: T0, tookOffAt: null, takeoffAirport: null, landedAt: null, landingAirport: null };
+    w.addSightings([s]);
+    w.addSightings([{ ...s, lastSeenAt: T0 + 7 }]);
+    await w.flush();
+    expect(repo.sightings.get("s1")?.lastSeenAt).toBe(T0 + 7);
+  });
+
   it("writes nothing when the queue is empty", async () => {
     const repo = new FakeRepo();
     await createWriter(repo, opts, silent).flush();

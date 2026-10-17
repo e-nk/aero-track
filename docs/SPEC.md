@@ -641,16 +641,16 @@ events: id (uuid pk), hex, type, confidence, status, mode, window_start, window_
         evidence (jsonb), explanation (jsonb), explanation_source, opened_at, updated_at, closed_at
         index (hex, opened_at), index (status)
 recordings: id (text pk), title, source, attribution, captured_from, captured_to, file_url, reported_cause (jsonb null), created_at
-sightings: id (bigserial pk), hex, started_at, last_seen_at, took_off_at (null), takeoff_airport (null), landed_at (null), landing_airport (null)
+sightings: id (uuid pk), hex, started_at, last_seen_at, took_off_at (null), takeoff_airport (null), landed_at (null), landing_airport (null)
            index (hex, started_at)
 ```
 
 ### 11.9 Sightings ("Seen by AeroTrack")
-- A sighting is one continuous stretch of an aircraft in our buffer. It starts when a hex appears that isn't buffered, and ends when the hex leaves the buffer (`buffer.keepSec` after its last position).
+- A sighting is one continuous stretch of an aircraft in our data: a new observation more than `buffer.keepSec` after the sighting's last one starts a new sighting. Tracked by `apps/api/src/sightings.ts`, persisted through the writer, continued after a restart.
 - A take-off after a landing within the same sighting starts a new sighting (a new flight we watched).
 - Take-off and landing events fill `took_off_at` / `landed_at` and the airport idents.
 - Never deleted by retention (small rows). Counts only what our receivers' coverage showed; it is not a lifetime flight count.
-- `/api/aircraft/:hex` adds `sightings: { last7Days, total, firstSeenAt }`.
+- `/api/aircraft/:hex` adds `sightings: { last7Days, total, firstSeenAt }`, including the current sighting even before it reaches the database.
 
 ### 11.7 HTTP API
 

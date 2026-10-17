@@ -1,5 +1,6 @@
 import type { AircraftState, BehaviourEvent } from "@aerotrack/shared";
 import type { PositionRow, Repo } from "./repo";
+import type { Sighting } from "./sightings";
 
 export interface WriterOptions {
   flushMs: number;
@@ -19,6 +20,7 @@ export function createWriter(repo: Repo, opts: WriterOptions, log: WriterLog) {
   let positions: PositionRow[] = [];
   let aircraft = new Map<string, AircraftState>();
   let events = new Map<string, BehaviourEvent>();
+  let sightings = new Map<string, Sighting>();
   let chain: Promise<void> = Promise.resolve();
   let timer: ReturnType<typeof setInterval> | undefined;
 
@@ -31,22 +33,25 @@ export function createWriter(repo: Repo, opts: WriterOptions, log: WriterLog) {
   }
 
   async function writeBatch() {
-    if (!positions.length && !aircraft.size && !events.size) return;
-    const batch = { positions, aircraft, events };
+    if (!positions.length && !aircraft.size && !events.size && !sightings.size) return;
+    const batch = { positions, aircraft, events, sightings };
     positions = [];
     aircraft = new Map();
     events = new Map();
+    sightings = new Map();
 
     try {
       if (batch.aircraft.size) await repo.upsertAircraft([...batch.aircraft.values()]);
       if (batch.positions.length) await repo.insertPositions(batch.positions);
       if (batch.events.size) await repo.upsertEvents([...batch.events.values()]);
+      if (batch.sightings.size) await repo.upsertSightings([...batch.sightings.values()]);
     } catch (err) {
       log.error({ err }, "Database write failed; will retry on the next flush");
       // Writes are idempotent, so re-queue the whole batch. Newer queued versions win.
       positions = [...batch.positions, ...positions];
       for (const [hex, s] of batch.aircraft) if (!aircraft.has(hex)) aircraft.set(hex, s);
       for (const [id, e] of batch.events) if (!events.has(id)) events.set(id, e);
+      for (const [id, s] of batch.sightings) if (!sightings.has(id)) sightings.set(id, s);
       capPositions();
     }
   }
@@ -67,6 +72,9 @@ export function createWriter(repo: Repo, opts: WriterOptions, log: WriterLog) {
     },
     addEvents(list: BehaviourEvent[]) {
       for (const e of list) events.set(e.id, e);
+    },
+    addSightings(list: Sighting[]) {
+      for (const s of list) sightings.set(s.id, s);
     },
     flush,
     start() {

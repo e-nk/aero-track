@@ -1,9 +1,10 @@
 import type { AircraftState, BehaviourEvent, Confidence, DataMode, EventType } from "@aerotrack/shared";
-import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, min, sql } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import type { PositionRow, Repo } from "../repo";
+import type { Sighting } from "../sightings";
 import type { Db } from "./client";
-import { aircraft, events, positions } from "./schema";
+import { aircraft, events, positions, sightings } from "./schema";
 
 // Keeps each insert well under Postgres' 65,535 bind-parameter limit.
 const CHUNK = 1000;
@@ -23,6 +24,20 @@ function chunks<T>(rows: T[]): T[][] {
 const latestBy = <T>(rows: T[], key: (r: T) => string) => [...new Map(rows.map((r) => [key(r), r])).values()];
 
 type EventRow = typeof events.$inferSelect;
+type SightingRow = typeof sightings.$inferSelect;
+
+const sightingFromRow = (r: SightingRow): Sighting => ({
+  id: r.id,
+  hex: r.hex,
+  startedAt: toSec(r.startedAt),
+  lastSeenAt: toSec(r.lastSeenAt),
+  tookOffAt: r.tookOffAt ? toSec(r.tookOffAt) : null,
+  takeoffAirport: r.takeoffAirport,
+  landedAt: r.landedAt ? toSec(r.landedAt) : null,
+  landingAirport: r.landingAirport,
+});
+
+const optDate = (sec: number | null) => (sec === null ? null : toDate(sec));
 
 function eventFromRow(r: EventRow): BehaviourEvent {
   return {
@@ -174,6 +189,57 @@ export function createPgRepo(db: Db): Repo {
     async loadOpenEvents() {
       const rows = await db.select().from(events).where(eq(events.status, "open"));
       return rows.map(eventFromRow);
+    },
+
+    async upsertSightings(list: Sighting[]) {
+      for (const part of chunks(latestBy(list, (s) => s.id))) {
+        await db
+          .insert(sightings)
+          .values(
+            part.map((s) => ({
+              id: s.id,
+              hex: s.hex,
+              startedAt: toDate(s.startedAt),
+              lastSeenAt: toDate(s.lastSeenAt),
+              tookOffAt: optDate(s.tookOffAt),
+              takeoffAirport: s.takeoffAirport,
+              landedAt: optDate(s.landedAt),
+              landingAirport: s.landingAirport,
+            })),
+          )
+          .onConflictDoUpdate({
+            target: sightings.id,
+            set: {
+              startedAt: excluded(sightings.startedAt),
+              lastSeenAt: excluded(sightings.lastSeenAt),
+              tookOffAt: excluded(sightings.tookOffAt),
+              takeoffAirport: excluded(sightings.takeoffAirport),
+              landedAt: excluded(sightings.landedAt),
+              landingAirport: excluded(sightings.landingAirport),
+            },
+          });
+      }
+    },
+
+    async loadOpenSightings(sinceSec: number) {
+      const rows = await db.select().from(sightings).where(gte(sightings.lastSeenAt, toDate(sinceSec)));
+      return rows.map(sightingFromRow);
+    },
+
+    async sightingSummary(hex: string, sinceSec: number) {
+      const [all] = await db
+        .select({ total: count(), firstSeenAt: min(sightings.startedAt) })
+        .from(sightings)
+        .where(eq(sightings.hex, hex));
+      const recent = await db
+        .select({ id: sightings.id })
+        .from(sightings)
+        .where(and(eq(sightings.hex, hex), gte(sightings.startedAt, toDate(sinceSec))));
+      return {
+        total: Number(all?.total ?? 0),
+        firstSeenAt: all?.firstSeenAt ? toSec(new Date(all.firstSeenAt)) : null,
+        recentIds: recent.map((r) => r.id),
+      };
     },
 
     async recentEvents(hex: string, limit: number) {

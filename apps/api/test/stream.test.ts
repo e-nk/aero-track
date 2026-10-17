@@ -5,6 +5,7 @@ import { THRESHOLDS } from "@aerotrack/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app";
 import { AircraftStore } from "../src/buffer";
+import { SightingTracker } from "../src/sightings";
 import { SseHub } from "../src/sse";
 import { FakeRepo } from "./fakeRepo";
 import { T0, obs, state } from "./helpers";
@@ -60,6 +61,7 @@ async function start() {
     lifecycle: new EventLifecycle({ thresholds: THRESHOLDS, mode: "live", newId: () => "ev" }),
     repo: new FakeRepo(),
     hub,
+    sightings: new SightingTracker({ keepSec: THRESHOLDS.buffer.keepSec, newId: () => "s" }),
     status: () => ({ feedStatus: "ok", lastPollAt: T0 * 1000, consecutiveFailures: 0 }),
     nowSec: () => T0,
     corsOrigin: ["http://localhost:3000"],

@@ -1,11 +1,13 @@
 import type { AircraftState, BehaviourEvent } from "@aerotrack/shared";
 import type { PositionRow, Repo } from "../src/repo";
+import type { Sighting } from "../src/sightings";
 
 /** In-memory Repo for unit tests. */
 export class FakeRepo implements Repo {
   positions: PositionRow[] = [];
   aircraft = new Map<string, AircraftState>();
   events = new Map<string, BehaviourEvent>();
+  sightings = new Map<string, Sighting>();
   calls: string[] = [];
   failNext = 0;
 
@@ -28,6 +30,21 @@ export class FakeRepo implements Repo {
   async upsertEvents(events: BehaviourEvent[]) {
     this.maybeFail("upsertEvents");
     for (const e of events) this.events.set(e.id, e);
+  }
+  async upsertSightings(list: Sighting[]) {
+    this.maybeFail("upsertSightings");
+    for (const s of list) this.sightings.set(s.id, s);
+  }
+  async loadOpenSightings(sinceSec: number) {
+    return [...this.sightings.values()].filter((s) => s.lastSeenAt >= sinceSec);
+  }
+  async sightingSummary(hex: string, sinceSec: number) {
+    const mine = [...this.sightings.values()].filter((s) => s.hex === hex);
+    return {
+      total: mine.length,
+      firstSeenAt: mine.length ? Math.min(...mine.map((s) => s.startedAt)) : null,
+      recentIds: mine.filter((s) => s.startedAt >= sinceSec).map((s) => s.id),
+    };
   }
   async loadPositionsSince(sinceSec: number) {
     return this.positions.filter((p) => p.obs.t >= sinceSec).sort((a, b) => a.obs.t - b.obs.t);

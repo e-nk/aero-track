@@ -7,6 +7,7 @@ import {
   displayAltitude,
   formatAge,
   formatHeading,
+  formatSightings,
   formatSpeed,
   formatType,
   formatVerticalRate,
@@ -51,6 +52,7 @@ export function DetailsPanel() {
   const callsign = live?.callsign ?? state?.callsign ?? null;
   const open = openEventsFor(events, hex);
   const altitude = live ? displayAltitude(live) : null;
+  const seen = formatSightings(detail?.sightings);
   const ageSec = live && now !== null ? live.serverNow - live.lastPosTs + (now - live.receivedAtMs) / 1000 : null;
 
   return (
@@ -86,6 +88,7 @@ export function DetailsPanel() {
             <dl className="divide-y divide-white/5 text-sm">
               <Row label="Registration" value={state?.registration ?? NOT_AVAILABLE} />
               <Row label="Aircraft type" value={formatType(live?.typeCode ?? state?.typeCode ?? null, state?.typeDesc ?? null)} />
+              {seen && <Row label="Seen by AeroTrack" value={seen.text} note={seen.note} />}
             </dl>
           </section>
 

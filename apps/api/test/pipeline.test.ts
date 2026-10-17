@@ -5,6 +5,7 @@ import { AircraftStore } from "../src/buffer";
 import { createEventEngine } from "../src/eventEngine";
 import { createPipeline } from "../src/pipeline";
 import { parseResponse } from "../src/providers/adsblol/schema";
+import { SightingTracker } from "../src/sightings";
 import { createWriter } from "../src/writer";
 import { FakeRepo } from "./fakeRepo";
 import { loadSample } from "./providers/adsblol/sample";
@@ -17,7 +18,8 @@ function setup() {
   const lifecycle = new EventLifecycle({ thresholds: THRESHOLDS, mode: "live", newId: () => crypto.randomUUID() });
   const engine = createEventEngine({ store, lifecycle, thresholds: THRESHOLDS });
   const writer = createWriter(repo, THRESHOLDS.writer, silent);
-  return { repo, store, writer, pipeline: createPipeline({ store, engine, writer }) };
+  const sightings = new SightingTracker({ keepSec: THRESHOLDS.buffer.keepSec, newId: () => crypto.randomUUID() });
+  return { repo, store, writer, sightings, pipeline: createPipeline({ store, engine, writer, sightings }) };
 }
 
 describe("poll pipeline", () => {
@@ -31,6 +33,14 @@ describe("poll pipeline", () => {
     expect(repo.positions).toHaveLength(19);
     expect(repo.positions.every((p) => p.mode === "live")).toBe(true);
     expect(repo.aircraft.size).toBe(19);
+  });
+
+  it("opens one sighting per aircraft and queues it", async () => {
+    const { repo, writer, sightings, pipeline } = setup();
+    pipeline.handle(parseResponse(loadSample()));
+    await writer.flush();
+    expect(repo.sightings.size).toBe(19);
+    expect(sightings.current("7cb05c")).toBeDefined();
   });
 
   it("queues only positions that are new", async () => {

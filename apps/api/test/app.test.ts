@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app";
 import { AircraftStore } from "../src/buffer";
 import type { PollerStatus } from "../src/poller";
+import { SightingTracker } from "../src/sightings";
 import { SseHub } from "../src/sse";
 import { FakeRepo } from "./fakeRepo";
 import { T0, obs, state } from "./helpers";
@@ -13,17 +14,19 @@ function setup(status: PollerStatus = { feedStatus: "ok", lastPollAt: T0 * 1000,
   const repo = new FakeRepo();
   const lifecycle = new EventLifecycle({ thresholds: THRESHOLDS, mode: "live", newId: () => "ev-1" });
   let now = T0;
+  const sightings = new SightingTracker({ keepSec: THRESHOLDS.buffer.keepSec, newId: () => "open-sighting" });
   const app = buildApp({
     store,
     lifecycle,
     repo,
     hub: new SseHub(THRESHOLDS.sse),
+    sightings,
     status: () => status,
     nowSec: () => now,
     corsOrigin: ["http://localhost:3000"],
     logger: false,
   });
-  return { app, store, repo, lifecycle, setNow: (t: number) => (now = t) };
+  return { app, store, repo, lifecycle, sightings, setNow: (t: number) => (now = t) };
 }
 
 let close: (() => Promise<unknown>) | undefined;
@@ -90,6 +93,22 @@ describe("api routes", () => {
     expect((await app.inject("/api/aircraft/7c0001")).json().history).toBe("insufficient_history");
     track(store, "7c0001", [T0 + 14, T0 + 21, T0 + 63]);
     expect((await app.inject("/api/aircraft/7c0001")).json().history).toBe("ok");
+  });
+
+  it("GET /api/aircraft/:hex counts sightings, including the current one not yet saved", async () => {
+    const { app, store, repo, sightings } = setup();
+    close = () => app.close();
+    track(store, "7c0001", [T0]);
+    await repo.upsertSightings([
+      { id: "older", hex: "7c0001", startedAt: T0 - 3 * 86400, lastSeenAt: T0 - 3 * 86400 + 600, tookOffAt: null, takeoffAirport: null, landedAt: null, landingAirport: null },
+      { id: "ancient", hex: "7c0001", startedAt: T0 - 30 * 86400, lastSeenAt: T0 - 30 * 86400 + 600, tookOffAt: null, takeoffAirport: null, landedAt: null, landingAirport: null },
+    ]);
+    sightings.touch("7c0001", T0);
+    expect((await app.inject("/api/aircraft/7c0001")).json().sightings).toEqual({
+      last7Days: 2,
+      total: 3,
+      firstSeenAt: T0 - 30 * 86400,
+    });
   });
 
   it("GET /api/aircraft/:hex is 404 for an aircraft we can't see", async () => {

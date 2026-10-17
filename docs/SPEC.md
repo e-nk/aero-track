@@ -37,6 +37,10 @@ Users:
 - Airline and aircraft-type filters
 - Loading, error and empty states
 - One recorded past incident from the ADSB.lol globe_history archive
+- Take-off and landing events near known airports (9.11)
+- "Seen by AeroTrack" counts per aircraft, from our own observations (11.9)
+- Aircraft photo from Planespotters.net, with photographer credit (5.7)
+- Altitude display: GPS altitude when available, else labelled pressure altitude (12.4)
 
 ### P2 (if time)
 - LLM phrasing layer (input: detector output only)
@@ -46,7 +50,8 @@ Users:
 ### Cut (do not build)
 - Metadata-only flight preview, ADSBdb integration
 - Route lines, domestic/international filter. If routes ever appear, label "typical route for this callsign"
-- Mixed live/sample view, aircraft photos, airport search, filter persistence, polished bottom sheet
+- Mixed live/sample view, airport search, filter persistence, polished bottom sheet
+- ETA, destination or arrival-time predictions. We don't know where a flight is going, so any ETA would rest on an invented route (rule 2).
 - Accounts (open question, see section 16)
 
 ## 3. Architecture
@@ -295,10 +300,22 @@ Offline (P0): Protomaps PMTiles
 - `scripts/build-airlines.ts` generates `packages/shared/src/airlines.ts`: `{ iata: "QF", icao: "QFA", name: "Qantas" }[]`. Keep only active airlines with both codes.
 - Flight number search: `QF1` → `QFA1`. Label results "Matched by airline prefix". Some airlines use callsign numbers that differ from flight numbers, so a miss must say "No live aircraft found for this flight number. The callsign may differ."
 
-### 5.5 Airports (optional, for context and later go-around)
+### 5.5 Airports (P1, take-off and landing)
 
-- OurAirports CSV: `https://davidmegginson.github.io/ourairports-data/airports.csv`
-- Keep a Sydney-region subset (YSSY, YSBK, YSCN, YSWS and similar) in `packages/shared`.
+- OurAirports CSV: `https://davidmegginson.github.io/ourairports-data/airports.csv` (public domain). Verified 2026-10-17.
+- `scripts/build-airports.ts` generates `packages/shared/src/airports.ts`: every AU airport with an ICAO-style ident (`Y` + 3 letters, from `icao_code` or `ident`) within 70 nm of the poll centre. Fields: `ident`, `name`, `lat`, `lon`, `elevationFt`. Commit the generated file.
+- Names are OurAirports names, unchanged.
+
+### 5.7 Aircraft photos: Planespotters.net (P1)
+
+- Endpoint: `GET https://api.planespotters.net/pub/photos/hex/{hex}` (photos linked to the current aircraft for that hex). Free, no key, CORS-enabled. Returns at most one photo: `{ photos: [{ id, thumbnail: { src, size }, thumbnail_large: { src, size }, link, photographer }] }`, or an empty array. Verified 2026-10-17.
+- Terms (https://www.planespotters.net/photo/api), which shape the design:
+  - The **browser** calls the API directly. Our api must not fetch, proxy or re-expose it ("re-exposing the API or its data through your own API" is prohibited). Rule 6 (browsers never call adsb.lol) is unaffected.
+  - Images load straight from `thumbnail` / `thumbnail_large` by the browser that shows them. Never stored, re-hosted or proxied, so no Next.js `<Image>` optimisation: use a plain `<img>`.
+  - Credit the photographer in visible text next to the image. The thumbnail is a plain link to the `link` URL, unchanged, without `rel="nofollow"`.
+  - All returned URLs are used unchanged. JSON may be cached up to 24 h (browser memory is enough).
+  - Photos must not be a paid or member-only feature, and must not be used for ML datasets.
+- Honesty: label "Photo of {registration} by {photographer}, via Planespotters.net. It may not show the aircraft's current paint scheme." No photo → show nothing (no placeholder aircraft). Not available offline.
 
 ### 5.6 LLM phrasing (P2)
 
@@ -341,7 +358,8 @@ export interface AircraftState {
 
 export type EventType =
   | "climb" | "descent" | "turn" | "circling"
-  | "rapid_descent" | "signal_lost" | "glitch" | "gap" | "emergency";
+  | "rapid_descent" | "signal_lost" | "glitch" | "gap" | "emergency"
+  | "takeoff" | "landing";
 
 export type Confidence = "observed" | "possible" | "fact";
 
@@ -415,6 +433,7 @@ export const THRESHOLDS = {
     revertWithinSamples: 2,
     revertToleranceFt: 300,
   },
+  takeoffLanding: { confirmObs: 3, minClimbFt: 200, maxTouchdownAltFt: 2000, airportRadiusKm: 5, nearAirportKm: 20 },
   gap: { thresholdSec: 60 },
   signalLost: { afterSec: 60 },
   lifecycle: { closeAfterSec: 60, reopenCooldownSec: 120 },
@@ -519,7 +538,8 @@ export const dHeading = (a: number, b: number) => ((b - a + 540) % 360) - 180; /
 
 ### 9.6 Signal lost / stale (P0)
 - Trigger: `ctx.now - ctx.lastPosTs > signalLost.afterSec`.
-- Evidence: `secondsSinceLastPosition`, `lastAltFt`, `lastLat`, `lastLon`.
+- Evidence: `secondsSinceLastPosition`, `lastAltFt`, `lastLat`, `lastLon`, plus `lastVertical` (`climbing` / `descending` / `level`, from `display.levelRateFpm`) and, when within `takeoffLanding.nearAirportKm`, `nearAirport`, `nearAirportKm`.
+- "How we know" then reads e.g. "Last seen about 8 km from Sydney Kingsford Smith International Airport, descending." It never says the aircraft landed.
 - Confidence: `fact`.
 - Closes automatically when a fresh position arrives.
 
@@ -540,6 +560,15 @@ export const dHeading = (a: number, b: number) => ((b - a + 540) % 360) - 180; /
 - Evidence: `squawk`, `emergency`.
 - Confidence: `fact`.
 - Never interpreted. Never sent to the LLM.
+
+### 9.11 Take-off and landing (P1)
+- Look at every segment of the clean track (a transition must not straddle a gap).
+- Take-off: a point with `onGround` followed by at least `takeoffLanding.confirmObs` airborne points, with no ground point among them, gaining at least `minClimbFt` from the first airborne point. Time = first airborne point.
+- Landing: an airborne point at or below `maxTouchdownAltFt`, followed by at least `confirmObs` ground points with no airborne point among them. Time = first ground point.
+- Report the most recent take-off and the most recent landing in the buffer (so a card stays for up to 15 minutes, then closes).
+- Airport: nearest from `airports.ts` within `airportRadiusKm` of the transition point; otherwise none ("away from the airports we know about").
+- Evidence: `at`, `airport` (ident), `airportName`, `airportKm`, plus `altFt` for take-off (altitude at confirmation).
+- Confidence: `observed`. Aircraft that never report ground status (some older transponders) produce no take-off or landing events; that's a known limitation, not a reason to guess.
 
 ### 9.10 Event lifecycle (`packages/detectors/src/lifecycle.ts`, used by `apps/api/src/eventEngine.ts` and the replay engine)
 - Key: `(hex, type)`. At most one open event per key.
@@ -566,6 +595,8 @@ Each returns `{ seen, commonly?, cannotTell }`. Fill only from evidence; a missi
 | glitch | "One altitude reading was inconsistent and has been ignored." | "Single bad readings are a normal part of radio data." | "It doesn't reflect a real change in altitude." |
 | gap | "No data between {gapStart} and {gapEnd}." | (none) | "The line shows a gap, not the actual path." |
 | emergency | "This aircraft is transmitting an emergency code." | (none) | "The code alone doesn't tell us the reason." |
+| takeoff | "This aircraft took off near {airportName} at {time}." / "This aircraft took off at {time}, away from the airports we know about." | (none) | "The data doesn't show where it is going." |
+| landing | "This aircraft landed near {airportName} at {time}." / "This aircraft landed at {time}, away from the airports we know about." | (none) | "The data doesn't show the flight's full route." |
 
 Card labels: "What we see", "What this commonly means", "What we can't tell". Plus a "How we know" expander listing evidence in plain words.
 
@@ -610,7 +641,16 @@ events: id (uuid pk), hex, type, confidence, status, mode, window_start, window_
         evidence (jsonb), explanation (jsonb), explanation_source, opened_at, updated_at, closed_at
         index (hex, opened_at), index (status)
 recordings: id (text pk), title, source, attribution, captured_from, captured_to, file_url, reported_cause (jsonb null), created_at
+sightings: id (bigserial pk), hex, started_at, last_seen_at, took_off_at (null), takeoff_airport (null), landed_at (null), landing_airport (null)
+           index (hex, started_at)
 ```
+
+### 11.9 Sightings ("Seen by AeroTrack")
+- A sighting is one continuous stretch of an aircraft in our buffer. It starts when a hex appears that isn't buffered, and ends when the hex leaves the buffer (`buffer.keepSec` after its last position).
+- A take-off after a landing within the same sighting starts a new sighting (a new flight we watched).
+- Take-off and landing events fill `took_off_at` / `landed_at` and the airport idents.
+- Never deleted by retention (small rows). Counts only what our receivers' coverage showed; it is not a lifetime flight count.
+- `/api/aircraft/:hex` adds `sightings: { last7Days, total, firstSeenAt }`.
 
 ### 11.7 HTTP API
 
@@ -671,7 +711,11 @@ event: status        data: { feedStatus: "ok" | "degraded" | "down", lastPollAt 
 
 ### 12.4 Details panel
 - Identity: callsign, registration, type (code + description). The live API has no `desc`, so live `typeDesc` is null ("Not available") unless a static type-code table is added later. Archive imports may fill it from the trace's top-level `desc`.
+- Photo (5.7) at the top when Planespotters has one, with the credit line and link. Otherwise nothing.
 - Now: altitude, speed, heading, vertical rate, last position time ("12 s ago").
+- Altitude: show GPS altitude (`alt_geom`, carried as `altGeomFt`) when present, labelled "(GPS)". Otherwise barometric altitude labelled "(pressure altitude)" with the note "Measured against standard air pressure, so it can differ from the real height by a few hundred feet." Map colour bands use the same displayed altitude. Detectors always use barometric altitude (never mixed within a track). GPS altitude is height above the WGS84 ellipsoid, about 70 ft above sea level around Sydney.
+- "Seen by AeroTrack: {n} times in the last 7 days" (11.9), with "Counts only what our coverage showed since {firstSeenAt}."
+
 - Insights: all open event cards, newest first, then timeline (P1). Titles in `apps/web/lib/eventCopy.ts`; "possible" events get an amber "Possible" chip.
 - On selection the panel loads `/api/aircraft/:hex` and the track, and refreshes both after every snapshot. Open events from the detail response seed the store, because the stream only sends changes made after the browser connected.
 - With enough history and no open events: "No notable changes in the last few minutes."
@@ -748,6 +792,8 @@ Required fixtures and expectations:
 - Accounts and watchlist: currently cut. Adding Better Auth or Auth.js with a watchlist table is roughly a half-day if needed.
 - Poll interval: adsb.lol publishes no limit (dynamic, load-based). Start at 7 s with one request and watch for 429s.
 - Whether to show "typical route" from the adsb.lol routeset API.
+- Aircraft details (year built, operator): on hold. Would need an open aircraft database with a compatible licence (the live API doesn't include them; archive traces have `ownOp`, `year`).
+- A source for lifetime flight history per aircraft (the owner is researching). Until then, only our own sightings (11.9).
 
 ## 17. Environment variables
 

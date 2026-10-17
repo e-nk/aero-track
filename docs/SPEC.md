@@ -198,9 +198,9 @@ Aircraft object fields we use (readsb format, all optional except `hex`; verifie
 | `flight` | string | Callsign | Space-padded. `trim()` it |
 | `r` | string | Registration | |
 | `t` | string | ICAO type designator, e.g. B738 | |
-| `category` | string | Emitter category A0-A7, B*, C* | A7 = rotorcraft. A0 = no info (common). C1-C7 = ground vehicles and obstacles: the adapter drops them, they are not aircraft |
+| `category` | string | Emitter category A0-A7, B*, C* | A7 = rotorcraft. A0 = no info (common). C1-C7 = ground vehicles and obstacles: the adapter drops them, they are not aircraft. Towers also appear (type `TWR`, no category, e.g. `SSM1`); the adapter drops those too |
 | `alt_baro` | number or `"ground"` | Barometric altitude, ft | `"ground"` means on ground |
-| `alt_geom` | number | Geometric altitude, ft | |
+| `alt_geom` | number | Geometric altitude, ft | Not used as a fallback for `alt_baro`: never mix baro and geometric altitude in one track |
 | `gs` | number | Ground speed, kt | |
 | `track` | number | True track over ground, degrees | Use for turns. Often missing on the ground |
 | `baro_rate` | number | Vertical rate, ft/min | Prefer over geom_rate |
@@ -571,7 +571,8 @@ Card labels: "What we see", "What this commonly means", "What we can't tell". Pl
 - Timeout 5 s via AbortController.
 - On failure (network error, timeout, non-2xx, 429, or a body that isn't JSON): exponential backoff up to 60 s, set `feedStatus = "down"`, broadcast status. Keep last known states. A 429 is an HTML page with no `Retry-After`, so never parse it as data.
 - Exactly one poller per process, including in dev (guard against hot-reload starting a second one).
-- The adapter drops category C1-C7 (ground vehicles and obstacles).
+- The adapter drops category C1-C7 (ground vehicles and obstacles) and type `TWR` (towers), and aircraft without `lat`/`lon`/`seen_pos` (position time unknown). Missing `emergency` maps to null, not `none`.
+- Manual check: `ADSB_USER_AGENT=... pnpm --filter api fetch:sample` makes one real request through client, schema and adapter and logs the result.
 - On success: parse with Zod (passthrough unknown fields, never crash on extra fields), adapt to `AircraftState`, push observations into the buffer.
 
 ### 11.2 Ring buffer

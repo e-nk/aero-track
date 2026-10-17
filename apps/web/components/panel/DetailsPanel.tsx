@@ -15,6 +15,7 @@ import {
 import { openEventsFor } from "../../lib/liveState";
 import { useNow } from "../../lib/useNow";
 import { useAircraftStore } from "../../store/aircraftStore";
+import { AircraftPhoto } from "./AircraftPhoto";
 import { EventCard } from "./EventCard";
 
 function Row({ label, value, note }: { label: string; value: string; note?: string | null }) {
@@ -81,6 +82,8 @@ export function DetailsPanel() {
         </p>
       ) : (
         <>
+          <AircraftPhoto hex={hex} registration={state?.registration ?? null} />
+
           <section aria-labelledby="identity-h" className="mb-4">
             <h3 id="identity-h" className="sr-only">
               Identity

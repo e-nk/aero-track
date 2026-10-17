@@ -461,16 +461,19 @@ export interface DetectContext {
   lastPosTs: number;
   squawk: string | null;
   emergency: string | null;
-  thresholds: typeof THRESHOLDS;
+  thresholds: Thresholds;     // THRESHOLDS satisfies this; tests may pass variants
 }
-export function runAll(track: Observation[], ctx: DetectContext): Detection[];
+export interface RunResult { status: "ok" | "insufficient_history"; detections: Detection[] }
+export function runAll(track: Observation[], ctx: DetectContext): RunResult;
 ```
+- `runAll` always reports facts (glitch, gap, signal lost). Behaviour detectors run only when `status` is `ok`, on the latest segment.
+- Glitch and gap each report the most recent occurrence in the track (one detection per type, matching the `(hex, type)` lifecycle key). Glitch evidence adds `count`.
 
 ### 9.1 Preprocessing (runs first, always)
 1. Sort by `t`. Drop exact duplicate `t` (keep last).
 2. Drop points with missing lat/lon.
-3. `alt_baro === "ground"` → `altFt = 0`, `onGround = true`.
-4. Drop position jumps where implied ground speed between consecutive points exceeds `maxImpliedGsKt`.
+3. `alt_baro === "ground"` → `altFt = 0`, `onGround = true`. Done in the provider adapter, so detectors receive it already applied.
+4. Drop position jumps where implied ground speed from the last kept point exceeds `maxImpliedGsKt`.
 5. Glitch pass (see 9.7): mark and exclude spike points, emit `glitch` detection.
 6. Gap pass (see 9.8): split into segments where `dt > gap.thresholdSec`. Behaviour detectors use ONLY the latest segment.
 7. If the latest segment has fewer than `minPoints` or spans less than `minSpanSec`, return status `insufficient_history` and run no behaviour detectors.
@@ -485,11 +488,13 @@ export const dHeading = (a: number, b: number) => ((b - a + 540) % 360) - 180; /
 - Trigger A: `|alt_last - alt_first| >= minNetFt` AND at least `monotonicShare` of steps move in that direction.
 - Trigger B: the last `minObs` points all have `|baroRateFpm| > baroRateFpm` with the same sign, spanning `minSpanSec`.
 - Ignore on-ground points.
-- Evidence: `startAltFt`, `endAltFt`, `netFt`, `spanSec`, `avgRateFpm`, `obs`.
+- Trigger A uses the longest recent window that qualifies, trimmed to start at the first step in the detected direction. Points with unknown altitude are skipped.
+- Evidence: `basis` (`altitude` or `vertical_rate`), `startAltFt`, `endAltFt`, `netFt` (signed), `spanSec`, `avgRateFpm`, `obs`. Altitude fields are omitted when altitude is unknown.
 - Confidence: `observed`.
 
 ### 9.3 Sustained turn (P0)
 - Window: last `turn.windowSec`.
+- Ignore on-ground points and points with unknown track.
 - Sum signed `dHeading` between consecutive tracks, skipping steps with `|d| < ignoreStepBelowDeg`.
 - Trigger: `|sum| >= minCumulativeDeg`.
 - Evidence: `totalDeg`, `direction` (`left` if negative, `right` if positive), `spanSec`.
@@ -543,7 +548,7 @@ export const dHeading = (a: number, b: number) => ((b - a + 540) % 360) - 180; /
 
 ## 10. Explanation templates (`packages/detectors/src/explain.ts`)
 
-Each returns `{ seen, commonly?, cannotTell }`. Fill only from evidence. Round numbers for humans (altitudes to nearest 100 ft, rates to nearest 100 fpm, times to nearest minute or 10 s).
+Each returns `{ seen, commonly?, cannotTell }`. Fill only from evidence; a missing value renders "Not available". Round numbers for humans (altitudes to nearest 100 ft, rates to nearest 100 fpm, times to nearest 10 s under a minute, otherwise nearest minute). Exception: "staying within {altSpreadFt} ft" is an upper bound, so it rounds up to the next 100 ft. Clock times use `DISPLAY_TIME_ZONE` (Australia/Sydney) from `packages/shared/src/config/display.ts`, formatted like "12:20 pm".
 
 | Type | seen | commonly | cannotTell |
 |---|---|---|---|

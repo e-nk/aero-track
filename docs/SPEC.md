@@ -270,7 +270,15 @@ Optional route lookup (cut from MVP, documented for later):
   - 12: indicated airspeed or null
   - 13: roll angle or null
 - Import rules: points with flag `&8` have geometric, not barometric, altitude, and `&4` means geometric vertical rate. Either drop those values (set to null) or keep them consistently; never mix baro and geometric values in one track silently.
-- Script output: recording JSON (section 8).
+- Script output: recording JSON (section 8). `pnpm --filter api recording:import -- --trace <file> --title "..." --from <time> --to <time> --cause <cause.json> [--out ../web/public/recordings]` (adapter + Zod schema in `apps/api/src/recordings/globeHistory.ts`). Geometric altitude (`&8`) becomes null; vertical rate is kept even when geometric (`&4`), matching the live adapter's `geom_rate` fallback. Ground points get altitude 0 and `onGround`, like the live adapter.
+- Extraction verified 2026-10-18: add `--occurrence=1` so tar stops at the member; curl then reports "Failure writing output" (error 23), which is expected. The 2024-11-08 prod release is 2.0 GB + 426 MB; the wanted trace was found early in the stream. Archive traces report about every 2.4 s, denser than the 10 s live poll; replay still evaluates every 10 s.
+
+#### The archived incident (Phase 12)
+- QFA520, Boeing 737-838 VH-VYH (hex `7c6db7`, from the Australian registration formula and seen live), Sydney, 8 November 2024. Recording `2024-11-08-return-to-sydney-soon-after-take-off`, 12:30-13:10 AEDT, 1,017 points. Cause text in `apps/api/scripts/incidents/2024-11-08-vh-vyh.cause.json`.
+- Source: ATSB final report AO-2024-057, released 29 April 2026 (https://www.atsb.gov.au/investigations/ao-2024-057). Report timeline: take-off roll 12:34:35, holding pattern south of the airport around 12:51, landing on 34L at 13:05:50.
+- The trace agrees: take-off about 12:35:20, two racetrack loops at 4,075 ft about 12:48-13:01, touchdown 13:05:54. Squawk stayed 1345 throughout (the PAN PAN call was by radio), so no emergency event appears; only the "Later reported as" panel mentions the declared emergency.
+- Replay events: take-off, climb, turn, turn, possibly circling, descent, landing (test: `apps/web/test/incidentReplay.test.ts`).
+- Recording titles describe only what the data shows ("Return to Sydney soon after take-off"), never the reported cause.
 
 ### 5.3 Map tiles
 
@@ -758,7 +766,7 @@ event: status        data: { feedStatus: "ok" | "degraded" | "down", lastPollAt 
 - Altitude: show GPS altitude (`alt_geom`, carried as `altGeomFt`) when present, labelled "(GPS)". Otherwise barometric altitude labelled "(pressure altitude)" with the note "Measured against standard air pressure, so it can differ from the real height by a few hundred feet." Map colour bands use the same displayed altitude. Detectors always use barometric altitude (never mixed within a track). GPS altitude is height above the WGS84 ellipsoid, about 70 ft above sea level around Sydney.
 - "Seen by AeroTrack: {n} times in the last 7 days" (11.9), with "Counts only what our coverage showed since {firstSeenAt}."
 
-- Insights: all open event cards, newest first, then timeline (P1). Titles in `apps/web/lib/eventCopy.ts`; "possible" events get an amber "Possible" chip.
+- Insights: all open event cards, newest first, then timeline (P1). Timeline ("Earlier") entries show the title and times; take-off, landing and glitch show a single time. Only sentences that stay true after the event are repeated (take-off, landing, gap, glitch): the others describe a sliding window or the present, so after the event they would describe only its last moment. Titles in `apps/web/lib/eventCopy.ts`; "possible" events get an amber "Possible" chip.
 - On selection the panel loads `/api/aircraft/:hex` and the track, and refreshes both after every snapshot. Open events from the detail response seed the store, because the stream only sends changes made after the browser connected.
 - With enough history and no open events: "No notable changes in the last few minutes."
 - "How we know" uses `describeEvidence` from `packages/detectors/src/evidence.ts` (facts only; lines with missing evidence are left out).

@@ -187,7 +187,7 @@ export function DetailsPanel() {
                         <p className="text-text">
                           {item.title} <span className="text-muted">· {item.when}</span>
                         </p>
-                        <p className="text-text/80">{item.seen}</p>
+                        {item.seen && <p className="text-text/80">{item.seen}</p>}
                       </li>
                     ))}
                   </ol>

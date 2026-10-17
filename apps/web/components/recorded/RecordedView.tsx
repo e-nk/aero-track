@@ -10,6 +10,7 @@ import { OFFLINE } from "../../lib/config";
 import { loadRecording } from "../../lib/recordings";
 import { ReplayEngine } from "../../lib/replay/engine";
 import { useAircraftStore } from "../../store/aircraftStore";
+import { ReportedCause } from "./ReportedCause";
 import { FilterBar } from "../filters/FilterBar";
 import { ModeBadge } from "../ModeBadge";
 import { DetailsPanel } from "../panel/DetailsPanel";
@@ -122,15 +123,7 @@ export function RecordedView({ id }: { id: string }) {
       </header>
       {!recording && <p className="absolute inset-0 flex items-center justify-center text-muted">Loading recording…</p>}
       {recording && <ReplayControls title={recording.title} onSeek={seek} />}
-      {recording?.reportedCause && (
-        <aside className="absolute left-3 top-16 z-10 max-w-sm rounded-xl border border-white/10 bg-navy/90 p-3 text-sm text-text shadow-lg">
-          Later reported as: {recording.reportedCause.text}{" "}
-          <a href={recording.reportedCause.sourceUrl} target="_blank" rel="noopener" className="text-sky hover:underline">
-            {recording.reportedCause.sourceName}
-          </a>
-          <p className="mt-1 text-xs text-muted">From a published source, not from the flight data.</p>
-        </aside>
-      )}
+      {recording?.reportedCause && <ReportedCause cause={recording.reportedCause} />}
       <DetailsPanel />
     </main>
   );

@@ -12,6 +12,7 @@ const when = new Intl.DateTimeFormat("en-AU", {
   weekday: "short",
   day: "numeric",
   month: "short",
+  year: "numeric",
   hour: "numeric",
   minute: "2-digit",
 });
@@ -34,7 +35,7 @@ export function RecordingList() {
         )}
         <h1 className="mt-4 text-2xl font-semibold">Recorded flights</h1>
         <p className="mt-1 text-sm text-muted">
-          Real flights captured by AeroTrack. Replays run in your browser, the same way the live insights do.
+          Real flights, from AeroTrack&apos;s own captures and the ADSB.lol archive. Replays run in your browser, the same way the live insights do.
         </p>
         {!state && <p className="mt-6 text-muted">Loading…</p>}
         {state && state.recordings.length === 0 && <p className="mt-6">No recordings yet.</p>}

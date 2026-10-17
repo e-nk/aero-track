@@ -160,105 +160,125 @@ aerotrack/
 ### 5.1 ADSB.lol live API (primary, P0)
 
 - Base URL: `https://api.adsb.lol`
-- Interactive docs: `https://api.adsb.lol/docs` (VERIFY current endpoints there first)
-- Auth: none currently. VERIFY whether an API key is now required.
-- REQUIRED: send a `User-Agent` header on every request. Requests without one get 403. Node's fetch does not set one by default.
+- Interactive docs: `https://api.adsb.lol/docs` (OpenAPI at `/api/openapi.json`). Verified 2026-10-17. Raw sample: `docs/samples/adsblol-point.json`.
+- Auth: none as of 2026-10-17. The API docs say a key will be required in future, obtained by feeding adsb.lol. Keep `ADSB_BASE_URL` and an optional `ADSB_API_KEY` in env so a key can be added without code changes.
+- REQUIRED: send a `User-Agent` header on every request. Requests without one get 403 (verified). Node's fetch does not set one by default.
   - `User-Agent: AeroTrack/0.1 (+contact email)`
+- Rate limits: dynamic and not published ("dynamic based on the environment load", adsblol/api README). A 429 comes back as an nginx HTML page with no `Retry-After` header (seen after ~12 requests in ~10 s). The client must treat any non-JSON or 429 response as a failure and apply the §11.1 backoff. Tests never call the real API; use saved samples.
 
 Endpoints (v2):
 
 | Purpose | Endpoint |
 |---|---|
-| Aircraft near a point (radius in nautical miles, max 250) | `GET /v2/point/{lat}/{lon}/{radius}` |
+| Aircraft near a point (radius in nautical miles, max 250; larger values are clamped, not rejected) | `GET /v2/point/{lat}/{lon}/{radius}` |
 | Same, alternate form | `GET /v2/lat/{lat}/lon/{lon}/dist/{radius}` |
-| By ICAO hex | `GET /v2/hex/{hex}` |
+| Single closest aircraft to a point | `GET /v2/closest/{lat}/{lon}/{radius}` |
+| By ICAO hex | `GET /v2/hex/{hex}` (alias `/v2/icao/{hex}`) |
 | By callsign | `GET /v2/callsign/{callsign}` |
-| By registration | `GET /v2/reg/{reg}` |
+| By registration | `GET /v2/reg/{reg}` (alias `/v2/registration/{reg}`) |
 | By type designator | `GET /v2/type/{type}` |
-| By squawk | `GET /v2/squawk/{squawk}` |
+| By squawk | `GET /v2/squawk/{squawk}` (alias `/v2/sqk/{squawk}`) |
 
-Our poll: `GET /v2/point/-33.9/151.0/60` every 5 to 10 s (configurable). One request serves all clients.
+Also listed but unused: `/v2/mil`, `/v2/ladd`, `/v2/pia`, `/api/0/airport/{icao}`, `/0/me`.
 
-Response envelope (VERIFY):
+Our poll: `GET /v2/point/-33.9/151.0/60` every 7 s to start (configurable). One request serves all clients. Watch for 429s before going lower.
+
+Response envelope (verified):
 ```json
 { "ac": [ ... ], "msg": "No error", "now": 1760684400123, "total": 142, "ctime": 1760684400100, "ptime": 3 }
 ```
 - `now` is epoch milliseconds.
 
-Aircraft object fields we use (readsb format, all optional, VERIFY):
+Aircraft object fields we use (readsb format, all optional except `hex`; verified 2026-10-17):
 
 | Field | Type | Meaning | Notes |
 |---|---|---|---|
 | `hex` | string | ICAO 24-bit address | Primary key. May start with `~` for non-ICAO (TIS-B). Keep as-is |
+| `type` | string | Position source: `adsb_icao`, `adsb_icao_nt`, `mlat`, `tisb_*`, ... | NOT the aircraft type. Don't confuse with `t` |
 | `flight` | string | Callsign | Space-padded. `trim()` it |
 | `r` | string | Registration | |
 | `t` | string | ICAO type designator, e.g. B738 | |
-| `desc` | string | Long type name | Not always present |
-| `category` | string | Emitter category A0-A7, B*, C* | A7 = rotorcraft |
+| `category` | string | Emitter category A0-A7, B*, C* | A7 = rotorcraft. A0 = no info (common). C1-C7 = ground vehicles and obstacles: the adapter drops them, they are not aircraft |
 | `alt_baro` | number or `"ground"` | Barometric altitude, ft | `"ground"` means on ground |
 | `alt_geom` | number | Geometric altitude, ft | |
 | `gs` | number | Ground speed, kt | |
-| `track` | number | True track over ground, degrees | Use for turns |
+| `track` | number | True track over ground, degrees | Use for turns. Often missing on the ground |
 | `baro_rate` | number | Vertical rate, ft/min | Prefer over geom_rate |
 | `geom_rate` | number | Geometric vertical rate | Fallback |
 | `squawk` | string | Transponder code | String, keep leading zeros |
-| `emergency` | string | `none`, `general`, `lifeguard`, `minfuel`, `nordo`, `unlawful`, `downed`, `reserved` | |
-| `lat`, `lon` | number | Position | May be absent |
-| `seen_pos` | number | Seconds since last position update | |
+| `emergency` | string | `none`, `general`, `lifeguard`, `minfuel`, `nordo`, `unlawful`, `downed`, `reserved` | Often absent (17 of 25 in the sample). Absent means "Not available", not `none` |
+| `lat`, `lon` | number | Position | May be absent (all present in the point sample) |
+| `seen_pos` | number | Seconds since last position update | Can approach 60 s: the response includes stale positions |
 | `seen` | number | Seconds since any message | |
-| `mlat`, `tisb` | string[] | Fields derived via MLAT/TIS-B | Optional display |
+| `mlat`, `tisb` | string[] | Names of fields derived via MLAT/TIS-B | Always present, usually empty arrays |
 | `dst`, `dir` | number | Distance and bearing from query point | Point queries only |
+
+Not used: `desc` does not exist in the live API (it appears only in archive traces). Many extra fields appear (`ias`, `tas`, `mach`, `true_heading`, `nav_*`, `calc_track`, `dbFlags`, ...); the Zod schema passes them through.
 
 Position timestamp: `posTs = now/1000 - seen_pos` (seconds). Always store this, not receipt time.
 
-Aircraft disappear from the response once stale. The server must track `lastPosTs` per hex itself to detect signal loss.
+Aircraft disappear from the response once stale (around 60 s after the last position). The server must track `lastPosTs` per hex itself to detect signal loss. Because this sits right at `signalLost.afterSec`, expect flapping and tune that threshold on recorded data.
 
-Optional route lookup (cut from MVP, documented for later, VERIFY):
+Optional route lookup (cut from MVP, documented for later):
 - `POST https://api.adsb.lol/api/0/routeset`
 - Body: `{ "planes": [ { "callsign": "QFA1", "lat": -33.9, "lng": 151.1 } ] }`
-- Returns plausible origin/destination airports. Static and often stale. If used, label "typical route for this callsign".
+- Meant to return plausible origin/destination airports. On 2026-10-17 it returned 201 with an empty body (the OpenAPI says 200 with a string). Treat as unreliable. If used, label "typical route for this callsign".
 
 ### 5.2 ADSB.lol globe_history archive (P1, recorded incident)
 
-- Published as GitHub releases under the `adsblol` organisation, repos named like `globe_history_2025`, `globe_history_2026` (VERIFY exact repo).
+- Repos (verified 2026-10-17): `adsblol/globe_history_2026` (also `_2023`, `_2024`, `_2025`). Format docs: wiedehopf/readsb `README-json.md#trace-jsons`.
 - Licence: ODbL. Attribute "Data: ADSB.lol (ODbL)".
-- Daily archives are large and split into parts. Never fetch from the app. Use `scripts/import-globe-history.ts` once, offline.
-- Inside: `traces/<last 2 hex chars>/trace_full_<hex>.json` (VERIFY path).
-- Trace format (readsb, VERIFY):
+- One GitHub release per day, tagged `v<YYYY.MM.DD>-planes-readsb-prod-0` (also `-staging-0`, and a small `-mlatonly-0`). Use prod; use staging only if prod is missing or much smaller.
+- Each release is a tar split into `.tar.aa` (2.0 GB) and `.tar.ab` (~1.8 GB), about 3.8 GB per day. Never fetch from the app or CI. Use `scripts/import-globe-history.ts` once, offline.
+- Extract: `cat v<date>-planes-readsb-prod-0.tar.aa v<date>-planes-readsb-prod-0.tar.ab | tar -xf - -C <dir>`. To avoid storing 3.8 GB, stream both parts and extract one member: `(curl -sL <aa-url>; curl -sL <ab-url>) | tar -xf - ./traces/<xx>/trace_full_<hex>.json`.
+- Inside: `./traces/<last 2 hex chars>/trace_full_<hex>.json` (verified; `~` hexes included). Also a `heatmap/` directory we don't use.
+- **Trace files are gzip-compressed despite the `.json` extension.** Gunzip before parsing.
+- Trace format (readsb, verified on a real file):
 ```json
 {
-  "icao": "7c6b2d",
-  "timestamp": 1760600000.0,
+  "icao": "7c4a56",
+  "r": "VH-OYW", "t": "A21N", "desc": "AIRBUS A-321neo", "ownOp": "...", "year": "2024", "dbFlags": 0,
+  "version": "readsb 3.16.15 05df27d",
+  "timestamp": 1792108800.0,
   "trace": [
-    [0.0, -33.94, 151.17, 3500, 210.5, 165.2, 0, -800, { "flight": "QFA432 ", "t": "B738" }, "adsb_icao", 3600, -768, null, null]
+    [15546.73, -29.609318, 152.352474, 36000, 417.5, 197.6, 0, 0, { "type": "adsb_icao", "flight": "JST656  ", "squawk": "1055", "category": "A3" }, "adsb_icao", 37250, -32, 260, 0.0]
   ]
 }
 ```
+  - Top level: `timestamp` is midnight UTC of the archive day. `r`, `t`, `desc`, `ownOp`, `year`, `dbFlags` may be present.
+  - Every point has 14 elements:
   - index 0: seconds offset from `timestamp`
   - 1-2: lat, lon
-  - 3: altitude ft or `"ground"`
-  - 4: ground speed kt
-  - 5: track deg
-  - 6: flags bitfield
-  - 7: vertical rate fpm
-  - 8: aircraft details object or null
-  - later indexes: source, geom alt, geom rate, ias, roll (VERIFY)
+  - 3: altitude ft, `"ground"` or `null`
+  - 4: ground speed kt or null
+  - 5: track deg or null (true heading instead when index 3 is `"ground"`)
+  - 6: flags bitfield: `&1` stale position (none for 20 s before this one), `&2` start of a new leg, `&4` vertical rate is geometric, `&8` altitude is geometric
+  - 7: vertical rate fpm or null
+  - 8: aircraft details object (readsb aircraft.json fields, e.g. `flight`, `squawk`, `emergency`, `category`) or null. Only present on some points; carry the last seen values forward
+  - 9: source / type string or null
+  - 10: geometric altitude or null
+  - 11: geometric vertical rate or null
+  - 12: indicated airspeed or null
+  - 13: roll angle or null
+- Import rules: points with flag `&8` have geometric, not barometric, altitude, and `&4` means geometric vertical rate. Either drop those values (set to null) or keep them consistently; never mix baro and geometric values in one track silently.
 - Script output: recording JSON (section 8).
 
 ### 5.3 Map tiles
 
 Online (P0): OpenFreeMap
-- Style URL: `https://tiles.openfreemap.org/styles/liberty`
-- Other styles: see openfreemap.org (pick a dark one if available for the aviation palette)
-- No key, no registration. Donation-funded, no uptime guarantee.
+- Style URL: `https://tiles.openfreemap.org/styles/liberty` (verified; tiles send `access-control-allow-origin: *`)
+- Dark styles (verified 2026-10-17): `https://tiles.openfreemap.org/styles/fiord` (blue-grey `#45516E` background, closest to the aviation palette, default candidate) and `https://tiles.openfreemap.org/styles/dark` (near-black). Others: `bright`, `positron`.
+- No key, no registration. Donation-funded, no uptime guarantee. The PMTiles style is also the fallback if OpenFreeMap is down.
 - Attribution: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors.
 
 Offline (P0): Protomaps PMTiles
 - npm: `pmtiles`, `@protomaps/basemaps`
-- Extract Sydney once with the pmtiles CLI (VERIFY current build URL at docs.protomaps.com):
+- Extract Sydney once with the pmtiles CLI (single binary from protomaps/go-pmtiles GitHub releases; verified 2026-10-17):
 ```
   pmtiles extract https://build.protomaps.com/<YYYYMMDD>.pmtiles sydney.pmtiles --bbox=150.5,-34.3,151.6,-33.4 --maxzoom=13
 ```
+  - Pick `<YYYYMMDD>` from `https://maps.protomaps.com/builds`. Daily builds are kept only for about a week (plus the latest of each patch version), so don't hard-code a date. The planet file is ~139 GB; extract fetches only the needed ranges.
+  - Builds are basemap v4, compatible with `@protomaps/basemaps` 4.0.0 and newer (npm latest on 2026-10-17: `@protomaps/basemaps` 5.7.2, `pmtiles` 4.5.0).
 - Register the protocol in MapLibre:
 ```ts
   import { Protocol } from "pmtiles";
@@ -266,7 +286,7 @@ Offline (P0): Protomaps PMTiles
   maplibregl.addProtocol("pmtiles", protocol.tile);
 ```
 - Build the style with `@protomaps/basemaps` layers and source `pmtiles:///offline/sydney.pmtiles` (offline) or the R2 URL (online backup).
-- Offline also needs glyphs (fonts) and sprites served locally from `/public/offline/`. Download them from the Protomaps basemaps assets repo. Without this, labels and icons fail offline.
+- Offline also needs glyphs (fonts) and sprites served locally from `/public/offline/`. Download them from `github.com/protomaps/basemaps-assets`: `fonts/` and `sprites/v4/dark` (also `light`, `white`, `grayscale`, `black`). Without this, labels and icons fail offline.
 - Attribution: Protomaps, © OpenStreetMap contributors.
 
 ### 5.4 Airline prefix mapping (P1)
@@ -544,7 +564,9 @@ Card labels: "What we see", "What this commonly means", "What we can't tell". Pl
 ### 11.1 Poller
 - `setInterval` with drift guard; never overlap requests (skip tick if previous in flight).
 - Timeout 5 s via AbortController.
-- On failure: exponential backoff up to 60 s, set `feedStatus = "down"`, broadcast status. Keep last known states.
+- On failure (network error, timeout, non-2xx, 429, or a body that isn't JSON): exponential backoff up to 60 s, set `feedStatus = "down"`, broadcast status. Keep last known states. A 429 is an HTML page with no `Retry-After`, so never parse it as data.
+- Exactly one poller per process, including in dev (guard against hot-reload starting a second one).
+- The adapter drops category C1-C7 (ground vehicles and obstacles).
 - On success: parse with Zod (passthrough unknown fields, never crash on extra fields), adapt to `AircraftState`, push observations into the buffer.
 
 ### 11.2 Ring buffer
@@ -629,7 +651,7 @@ event: status        data: { feedStatus: "ok" | "degraded" | "down", lastPollAt 
 - Attribution control always on.
 
 ### 12.4 Details panel
-- Identity: callsign, registration, type (code + description).
+- Identity: callsign, registration, type (code + description). The live API has no `desc`, so live `typeDesc` is null ("Not available") unless a static type-code table is added later. Archive imports may fill it from the trace's top-level `desc`.
 - Now: altitude, speed, heading, vertical rate, last position time ("12 s ago").
 - Insights: most recent open event card, then timeline (P1).
 - Any missing field: "Not available from this source".
@@ -701,7 +723,7 @@ Required fixtures and expectations:
 
 - Final product name: AeroTrack or FlightSense.
 - Accounts and watchlist: currently cut. Adding Better Auth or Auth.js with a watchlist table is roughly a half-day if needed.
-- Poll interval: 5 or 10 s, depending on adsb.lol limits (VERIFY).
+- Poll interval: adsb.lol publishes no limit (dynamic, load-based). Start at 7 s with one request and watch for 429s.
 - Whether to show "typical route" from the adsb.lol routeset API.
 
 ## 17. Environment variables
@@ -712,6 +734,7 @@ DATABASE_URL=postgres://...
 PORT=8080
 ADSB_BASE_URL=https://api.adsb.lol
 ADSB_USER_AGENT=AeroTrack/0.1 (+you@example.com)
+ADSB_API_KEY=                 # optional, not required as of 2026-10-17
 POLL_INTERVAL_MS=7000
 CORS_ORIGIN=https://aerotrack.vercel.app
 ADMIN_TOKEN=change-me

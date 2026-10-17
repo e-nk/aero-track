@@ -9,6 +9,7 @@ import { createPgRepo } from "./db/repo";
 import { loadDotEnv, loadEnv } from "./env";
 import { createEventEngine } from "./eventEngine";
 import { FollowList } from "./follows";
+import { Retention } from "./retention";
 import { hydrate } from "./hydrate";
 import type { ParsedResponse } from "./providers/adsblol/schema";
 import { createPipeline } from "./pipeline";
@@ -187,6 +188,9 @@ app.log.info(
 
 await app.listen({ port: env.PORT, host: env.HOST });
 writer.start();
+const retention = new Retention({ repo, thresholds: THRESHOLDS, nowSec, log: app.log });
+void retention.runOnce();
+retention.start();
 hub.start();
 poller.start();
 followPoller.start();
@@ -198,6 +202,7 @@ async function shutdown(signal: string) {
   if (shuttingDown) return;
   shuttingDown = true;
   app.log.info({ signal }, "Shutting down");
+  retention.stop();
   await poller.stop();
   await followPoller.stop();
   await overviewPoller?.stop();

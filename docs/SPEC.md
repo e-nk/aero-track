@@ -654,7 +654,7 @@ Card labels: "What we see", "What this commonly means", "What we can't tell". Pl
 - On a failed write the batch is re-queued (writes are idempotent). Queued positions are capped at 20 × maxRows; the oldest are dropped with a warning.
 
 ### 11.5 Retention job
-- Every 30 min: delete live positions older than 24 h. Never delete positions referenced by a saved recording window (recordings are exported to JSON anyway).
+- Every 30 min (and once at start-up): delete positions older than 24 h (`thresholds.retention`). Recordings are copied into their own rows (`recordings.data`), so they don't depend on positions; a live capture must be exported within 24 h. Sightings and events are kept. Implemented in `apps/api/src/retention.ts` (failures are logged and retried next time).
 
 ### 11.6 Database schema (Drizzle, Postgres)
 
@@ -879,7 +879,7 @@ ANTHROPIC_API_KEY=            # P2 only
 `apps/web`:
 ```
 NEXT_PUBLIC_API_URL=https://<railway-domain>
-NEXT_PUBLIC_MAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty
+NEXT_PUBLIC_MAP_STYLE_URL=https://tiles.openfreemap.org/styles/fiord
 NEXT_PUBLIC_OFFLINE=0
 ```
 
@@ -891,11 +891,11 @@ NEXT_PUBLIC_OFFLINE=0
 - Set web env vars.
 
 **Railway (api + Postgres)**
-- New service from repo, root `apps/api`, start `pnpm --filter api start`.
+- New service from repo. Root directory stays at the repo root (the api imports the workspace packages, which a root of `apps/api` would cut off). Config file path `apps/api/railway.json`, which sets: Railpack builder, start `pnpm --filter api start`, pre-deploy `pnpm --filter api db:migrate`, health check `/health`, watch paths `apps/api/**`, `packages/**`, `pnpm-lock.yaml`, `package.json`, and `numReplicas: 1`.
+- The api runs TypeScript through `tsx`, so `tsx` is a runtime dependency (a production install skips dev dependencies). Verified 2026-10-18 with a clean copy: `pnpm install --frozen-lockfile --prod`, migrate, start, `/health` and CORS all work.
 - Add the Postgres plugin; `DATABASE_URL` is injected.
-- Run migrations on deploy (`pnpm --filter api db:migrate` as a pre-start step).
-- Watch paths: `apps/api/**`, `packages/**`.
 - Single instance (the poller must not run twice).
+- OpenSky credentials: one account allows one running overview poller (4,000 credits a day at 90 s). Don't run the same keys locally and in production at once.
 
 
 ## 19. Attribution and compliance

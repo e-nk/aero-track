@@ -12,6 +12,8 @@ export type StoredPosition = NewObservation;
 /** Persistence used by the api. Postgres in production (db/repo.ts), fakes in tests. */
 export interface Repo {
   insertPositions(rows: PositionRow[]): Promise<void>;
+  /** Retention (SPEC 11.5): delete positions older than sec. Returns how many were deleted. */
+  deletePositionsBefore(sec: number): Promise<number>;
   upsertAircraft(states: AircraftState[]): Promise<void>;
   upsertEvents(events: BehaviourEvent[]): Promise<void>;
   /** Live positions with t >= sinceSec, oldest first. */

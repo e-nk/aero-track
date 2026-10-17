@@ -69,6 +69,7 @@ export interface Thresholds {
   gap: { thresholdSec: number };
   signalLost: { afterSec: number };
   lifecycle: { closeAfterSec: number; reopenCooldownSec: number };
+  retention: { intervalMs: number; keepPositionsSec: number };
 }
 
 export const THRESHOLDS = {
@@ -144,4 +145,6 @@ export const THRESHOLDS = {
   gap: { thresholdSec: 60 },
   signalLost: { afterSec: 60 },
   lifecycle: { closeAfterSec: 60, reopenCooldownSec: 120 },
+  // SPEC 11.5: live positions are kept for a day. Recordings are copied into their own rows, and sightings are kept separately.
+  retention: { intervalMs: 30 * 60 * 1000, keepPositionsSec: 24 * 60 * 60 },
 } as const satisfies Thresholds;

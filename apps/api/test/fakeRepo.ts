@@ -23,6 +23,12 @@ export class FakeRepo implements Repo {
     }
   }
 
+  async deletePositionsBefore(sec: number) {
+    this.maybeFail("deletePositionsBefore");
+    const before = this.positions.length;
+    this.positions = this.positions.filter((p) => p.obs.t >= sec);
+    return before - this.positions.length;
+  }
   async insertPositions(rows: PositionRow[]) {
     this.maybeFail("insertPositions");
     this.positions.push(...rows);

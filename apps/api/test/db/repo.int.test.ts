@@ -72,6 +72,15 @@ describe.skipIf(!url)("Postgres repo", () => {
     expect(await repo.loadPositionsSince(0)).toEqual([]);
   });
 
+  it("deletes positions older than a time and says how many", async () => {
+    await repo.insertPositions([
+      { hex: "7c0001", obs: obs(T0 - 100), squawk: null, callsign: null, mode: "live" },
+      { hex: "7c0001", obs: obs(T0), squawk: null, callsign: null, mode: "live" },
+    ]);
+    expect(await repo.deletePositionsBefore(T0 - 50)).toBe(1);
+    expect((await repo.loadPositionsSince(0)).map((p) => p.obs.t)).toEqual([T0]);
+  });
+
   it("finds stored aircraft by callsign or dash-free registration", async () => {
     await repo.upsertAircraft([
       state("7c0001", obs(T0), { callsign: "QFA1", registration: "VH-OQA" }),

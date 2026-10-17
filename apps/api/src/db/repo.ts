@@ -1,5 +1,5 @@
 import type { AircraftState, BehaviourEvent, Confidence, DataMode, EventType, RecordingFile, RecordingMeta } from "@aerotrack/shared";
-import { and, asc, count, desc, eq, gte, inArray, lte, min, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, lt, lte, min, or, sql } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import type { PositionRow, Repo } from "../repo";
 import type { FollowEntry } from "../follows";
@@ -77,6 +77,11 @@ function eventFromRow(r: EventRow): BehaviourEvent {
 
 export function createPgRepo(db: Db): Repo {
   return {
+    async deletePositionsBefore(sec: number) {
+      const deleted = await db.delete(positions).where(lt(positions.t, toDate(sec))).returning({ id: positions.id });
+      return deleted.length;
+    },
+
     async insertPositions(rows: PositionRow[]) {
       for (const part of chunks(rows)) {
         await db

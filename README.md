@@ -9,6 +9,7 @@ A flight tracker for Sydney that explains what an aircraft is observably doing, 
 - **Live map** of aircraft around Sydney (detailed, every 10 seconds), plus every aircraft over Australia (lighter detail, every 90 seconds).
 - **Insights** written by deterministic rules, never an AI: climbing, descending, turning, possibly circling, rapid descent, emergency code, take-off, landing, signal lost, gaps and data glitches. Each one says what we see, what it commonly means and what the data can't tell us, with a "How we know" list.
 - **Follow a flight** after it leaves the Sydney area, worldwide, until it lands.
+- **Alerts for people waiting on a flight**: watch a flight and get calm, plain-English alerts when it takes off, lands, circles (for example while waiting to land), stops reporting or squawks an emergency code, as a toast and, if you allow it, a system notification. Works in recordings too.
 - **Search** by flight number (QF1), callsign (QFA1), registration (VH-OQA) or aircraft type (B738), and **filter** by airline or aircraft type.
 - **Recorded flights** replayed in the browser through the same rules as live, including one archived real incident with a separate, sourced "Later reported as" note.
 - **Offline demo mode** with a local map, for presenting without internet.
@@ -94,3 +95,4 @@ No Flightradar24 data, assets, names or interface designs are used.
 - Live positions are kept for 24 hours, so a live capture must be saved as a recording within a day.
 - Photos may not show the aircraft's current paint scheme.
 - Explanations describe patterns, not causes. Not for safety-critical use.
+- Alerts only arrive while AeroTrack is open in a tab (no push notifications yet). The follow list is shared, so anyone can stop worldwide tracking of a flight.

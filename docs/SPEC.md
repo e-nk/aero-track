@@ -43,6 +43,7 @@ Users:
 - Altitude display: GPS altitude when available, else labelled pressure altitude (12.4)
 - Australia-wide overview layer from the OpenSky Network, about every 90 s, no insights (5.8, 11.10)
 - Follow a flight worldwide via adsb.lol multi-hex lookups, up to 10 at once, destination only when observed (5.1, 11.11)
+- Flight alerts for watched flights (12.8)
 
 ### P2 (if time)
 - LLM phrasing layer (input: detector output only)
@@ -808,6 +809,13 @@ event: status        data: { feedStatus: "ok" | "degraded" | "down", lastPollAt 
 - Desktop: map plus right side panel. Mobile: map plus simple bottom panel.
 - WCAG AA contrast.
 
+### 12.8 Flight alerts (P1, hackathon pitch)
+- Design: `docs/superpowers/specs/2026-10-18-flight-alerts-design.md`. For people waiting on a flight: calm, plain-English alerts while AeroTrack is open.
+- "Watch this flight" in the panel (live: browser watch list `aerotrack.watch.v1` plus the shared follow; recorded: memory only). 🔔 on watched chips.
+- Alerts on: took off, landed, circling, signal lost and back, emergency code, rapid descent. Never on climbs, descents, turns, gaps or glitches. Only events opened within `alerts.backfillSec` of watching or page load.
+- Toasts (8 s, at most 3), a bell list for the visit, system notifications when allowed (tagged by alert id). Recorded alerts are labelled "Recorded" and cleared on mode switch.
+- Not push: nothing arrives with AeroTrack closed (roadmap: Web Push).
+
 ## 13. Offline demo mode
 
 - Env flag `NEXT_PUBLIC_OFFLINE=1` switches the map style to local PMTiles, local fonts and sprites, and disables SSE. The home page becomes the list of recorded flights ("Offline demo mode · live data needs an internet connection"); photo lookups are skipped; recordings load from `public/recordings`.
@@ -925,3 +933,4 @@ NEXT_PUBLIC_OFFLINE=0
 - Flight number to callsign by prefix is not reliable for every airline.
 - Explanations describe patterns, not causes.
 - Not for safety-critical use.
+- Alerts only work while AeroTrack is open; anyone can remove a flight from the shared follow list.

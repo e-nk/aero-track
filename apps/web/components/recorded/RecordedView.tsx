@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { OFFLINE } from "../../lib/config";
 import { loadRecording } from "../../lib/recordings";
 import { ReplayEngine } from "../../lib/replay/engine";
-import { useAircraftStore } from "../../store/aircraftStore";
+import { useAircraftStore, type ReplayLookup } from "../../store/aircraftStore";
 import { ReportedCause } from "./ReportedCause";
 import { FilterBar } from "../filters/FilterBar";
 import { ModeBadge } from "../ModeBadge";
@@ -25,6 +25,7 @@ export function RecordedView({ id }: { id: string }) {
   const headerRef = useHeaderHeight<HTMLElement>();
   const [recording, setRecording] = useState<RecordingFile | null | "missing">(null);
   const engineRef = useRef<ReplayEngine | null>(null);
+  const lookupRef = useRef<ReplayLookup | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,6 +41,11 @@ export function RecordedView({ id }: { id: string }) {
     if (!recording || recording === "missing") return;
     const engine = new ReplayEngine(recording, THRESHOLDS);
     engineRef.current = engine;
+    const lookup: ReplayLookup = {
+      identity: (hex) => engine.identity(hex),
+      position: (hex) => engine.track(hex).at(-1),
+    };
+    lookupRef.current = lookup;
     const store = useAircraftStore.getState();
     store.startRecorded({
       id: recording.id,
@@ -64,7 +70,8 @@ export function RecordedView({ id }: { id: string }) {
     const timer = setInterval(() => {
       const { replay, setReplayControls } = useAircraftStore.getState();
       if (replay?.playing) {
-        engine.advanceTo(engine.clock + (TICK_MS / 1000) * replay.speed);
+        const changes = engine.advanceTo(engine.clock + (TICK_MS / 1000) * replay.speed);
+        useAircraftStore.getState().applyReplayChanges(changes, lookup);
         if (engine.clock >= engine.end) setReplayControls({ playing: false });
       }
       // Push even while paused: positions are dead-reckoned from receipt time, so
@@ -85,9 +92,11 @@ export function RecordedView({ id }: { id: string }) {
   const seek = (t: number) => {
     const engine = engineRef.current;
     if (!engine) return;
-    engine.seek(t);
-    const { setReplayFrame } = useAircraftStore.getState();
-    setReplayFrame(engine.clock, engine.aircraft(Date.now()), engine.openEvents());
+    const store = useAircraftStore.getState();
+    if (t < engine.clock) store.resetReplayAlerts(); // replaying from the start: don't repeat old alerts
+    const changes = engine.seek(t);
+    if (lookupRef.current) store.applyReplayChanges(changes, lookupRef.current);
+    store.setReplayFrame(engine.clock, engine.aircraft(Date.now()), engine.openEvents());
   };
 
   if (recording === "missing") {

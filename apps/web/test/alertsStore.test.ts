@@ -80,3 +80,28 @@ describe("live alerts", () => {
     expect(useAircraftStore.getState().alerts).toHaveLength(1);
   });
 });
+
+describe("replay alerts", () => {
+  const replayInfo = { id: "r", title: "t", start: NOW, end: NOW + 600, clock: NOW, speed: 10, playing: true, attribution: "a", reportedCause: null, mode: "recorded" as const };
+  const lookup = { identity: () => ({ callsign: "QFA520", registration: null }), position: () => undefined };
+
+  it("alerts for flights watched in the replay, and clears them when leaving", () => {
+    const s = useAircraftStore.getState();
+    s.watch("7c6db7", NOW); // live watch
+    s.startRecorded(replayInfo);
+    useAircraftStore.getState().watch("7c6db7", 0); // replay watch at replay clock NOW
+    useAircraftStore.getState().applyReplayChanges({ opened: [{ ...landing("r1", NOW + 30), mode: "recorded" }], updated: [], closed: [] }, lookup);
+    expect(useAircraftStore.getState().alerts.map((a) => [a.kind, a.mode])).toEqual([["landing", "recorded"]]);
+
+    useAircraftStore.getState().reset(); // back to live
+    expect(useAircraftStore.getState()).toMatchObject({ alerts: [], replayWatch: [], watched: ["7c6db7"] });
+  });
+
+  it("resetReplayAlerts empties the list (used when seeking backwards)", () => {
+    useAircraftStore.getState().startRecorded(replayInfo);
+    useAircraftStore.getState().watch("7c6db7", 0);
+    useAircraftStore.getState().applyReplayChanges({ opened: [{ ...landing("r2", NOW + 30), mode: "recorded" }], updated: [], closed: [] }, lookup);
+    useAircraftStore.getState().resetReplayAlerts();
+    expect(useAircraftStore.getState()).toMatchObject({ alerts: [], unreadAlerts: 0, replayWatch: ["7c6db7"] });
+  });
+});

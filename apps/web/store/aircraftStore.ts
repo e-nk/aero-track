@@ -1,4 +1,5 @@
 import { NO_FILTERS, type Filters } from "../lib/filters";
+import type { LifecycleChanges } from "@aerotrack/detectors";
 import { THRESHOLDS } from "@aerotrack/shared";
 import { alertsForChanges, appendAlerts, type Alert } from "../lib/alerts";
 import { createWatchlist } from "../lib/watchlist";
@@ -44,6 +45,12 @@ export interface ReplayInfo {
 const watchlist = createWatchlist();
 const nowSec = () => Date.now() / 1000;
 
+/** How replay alerts look up a flight's name and position (from the ReplayEngine). */
+export interface ReplayLookup {
+  identity: (hex: string) => { callsign: string | null; registration: string | null } | undefined;
+  position: (hex: string) => { lat: number; lon: number } | undefined;
+}
+
 interface AircraftStore extends LiveState {
   mode: "live" | "recorded";
   /** Recorded mode only: the recording being replayed and its controls. */
@@ -80,6 +87,10 @@ interface AircraftStore extends LiveState {
   watch: (hex: string, nowSec: number) => boolean;
   unwatch: (hex: string) => void;
   markAlertsRead: () => void;
+  /** Recorded mode: alerts for one replay step's lifecycle changes. */
+  applyReplayChanges: (changes: LifecycleChanges, lookup: ReplayLookup) => void;
+  /** Recorded mode: forget alerts (seeking backwards replays from the start). */
+  resetReplayAlerts: () => void;
   reset: () => void;
 }
 
@@ -155,6 +166,23 @@ export const useAircraftStore = create<AircraftStore>()((set) => ({
       return { watched: watchlist.list() };
     }),
   markAlertsRead: () => set({ unreadAlerts: 0 }),
+  applyReplayChanges: (changes, lookup) =>
+    set((s) => {
+      if (s.mode !== "recorded" || !s.replay || !s.replayWatch.length) return {};
+      const replay = s.replay;
+      const fresh = alertsForChanges({
+        opened: changes.opened,
+        closed: changes.closed,
+        watched: new Set(s.replayWatch),
+        since: (hex) => (s.watchSince[hex] ?? replay.start) - THRESHOLDS.alerts.backfillSec,
+        identity: lookup.identity,
+        position: lookup.position,
+        mode: replay.mode,
+      });
+      const { alerts, added } = appendAlerts(s.alerts, fresh);
+      return added ? { alerts, unreadAlerts: s.unreadAlerts + added } : {};
+    }),
+  resetReplayAlerts: () => set({ alerts: [], unreadAlerts: 0 }),
   setFilters: (patch) => set((s) => ({ filters: { ...s.filters, ...patch } })),
   // Ignore late responses for an aircraft that is no longer selected.
   setSelection: (hex, patch) =>

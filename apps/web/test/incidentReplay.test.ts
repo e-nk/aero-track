@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { THRESHOLDS, parseRecording } from "@aerotrack/shared";
 import { describe, expect, it } from "vitest";
+import { alertsForChanges } from "../lib/alerts";
 import { ReplayEngine } from "../lib/replay/engine";
 
 // The archived incident (SPEC 14 phase 12): QFA520, 8 Nov 2024, ADSB.lol globe_history.
@@ -26,5 +27,31 @@ describe("archived incident replay", () => {
     expect(opened).not.toContain("emergency"); // squawk stayed 1345; the PAN PAN call was by radio
     expect(opened.indexOf("takeoff")).toBeLessThan(opened.indexOf("circling"));
     expect(opened.indexOf("circling")).toBeLessThan(opened.indexOf("landing"));
+  });
+});
+
+describe("alerts on the archived incident", () => {
+  it("watching QFA520 gives took off, circling and landed, in that order, all recorded", () => {
+    const e = new ReplayEngine(rec, THRESHOLDS);
+    const kinds: string[] = [];
+    const bodies: string[] = [];
+    for (let t = e.start; t <= e.end; t += 10) {
+      const changes = e.advanceTo(t);
+      for (const a of alertsForChanges({
+        opened: changes.opened,
+        closed: changes.closed,
+        watched: new Set(["7c6db7"]),
+        since: () => e.start - THRESHOLDS.alerts.backfillSec,
+        identity: (hex) => e.identity(hex),
+        position: (hex) => e.track(hex).at(-1),
+        mode: rec.mode,
+      })) {
+        expect(a.mode).toBe("recorded");
+        kinds.push(a.kind);
+        bodies.push(a.body);
+      }
+    }
+    expect(kinds).toEqual(["takeoff", "circling", "landing"]);
+    expect(bodies[1]).toMatch(/^QFA520 has been circling about \d+ km south(-east|-west)? of Sydney Kingsford Smith International Airport for about/);
   });
 });

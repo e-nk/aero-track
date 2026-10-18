@@ -33,7 +33,7 @@ function read(storage: SimpleStorage | null): string[] {
   }
 }
 
-export function createWatchlist(storage: SimpleStorage | null = browserStorage(), max = THRESHOLDS.follow.maxFollowed): Watchlist {
+export function createWatchlist(storage: SimpleStorage | null = browserStorage(), max: number = THRESHOLDS.follow.maxFollowed): Watchlist {
   let hexes = read(storage).slice(0, max);
   const save = () => {
     try {

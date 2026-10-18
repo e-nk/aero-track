@@ -70,6 +70,7 @@ export interface Thresholds {
   signalLost: { afterSec: number };
   lifecycle: { closeAfterSec: number; reopenCooldownSec: number };
   retention: { intervalMs: number; keepPositionsSec: number };
+  alerts: { backfillSec: number; placeWithinKm: number; toastMs: number; maxToasts: number };
 }
 
 export const THRESHOLDS = {
@@ -148,4 +149,6 @@ export const THRESHOLDS = {
   lifecycle: { closeAfterSec: 60, reopenCooldownSec: 120 },
   // SPEC 11.5: live positions are kept for a day. Recordings are copied into their own rows, and sightings are kept separately.
   retention: { intervalMs: 30 * 60 * 1000, keepPositionsSec: 24 * 60 * 60 },
+  // Flight alerts (alerts design spec): ignore events older than 2 min when watching starts or the page loads.
+  alerts: { backfillSec: 120, placeWithinKm: 60, toastMs: 8000, maxToasts: 3 },
 } as const satisfies Thresholds;

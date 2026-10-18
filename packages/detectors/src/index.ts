@@ -14,6 +14,7 @@ export type { HistoryStatus, Preprocessed } from "./preprocess";
 export { preprocess } from "./preprocess";
 export { dHeading, distanceNm, nearestAirport } from "./geo";
 export { explain, formatDuration } from "./explain";
+export { NA, amount, clock, duration } from "./format";
 export { describeEvidence } from "./evidence";
 export { EventLifecycle, type LifecycleChanges, type LifecycleOptions } from "./lifecycle";
 

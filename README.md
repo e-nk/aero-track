@@ -46,13 +46,14 @@ Useful scripts:
 
 - `pnpm --filter api recording:export -- --title "..." --from <time> --to <time> [--out ../web/public/recordings]`: save a live capture as a recording (positions are kept for 24 hours).
 - `pnpm --filter api recording:import -- --trace <file> --title "..." --from <time> --to <time> --cause <cause.json>`: import an ADSB.lol archive trace (see SPEC 5.2).
+- `pnpm --filter api recording:seed`: load the bundled recordings into the database (a fresh database starts with none; production runs this on every deploy).
 - `pnpm --filter web fixture:recording`: regenerate the synthetic test recording.
 - `pnpm build:airports [--world]`, `pnpm build:airlines`: regenerate the airport and airline lists.
 - Offline demo: `pnpm --filter web offline:assets`, then `NEXT_PUBLIC_OFFLINE=1 pnpm --filter web build && pnpm --filter web start`.
 
 ## Deployment
 
-- **API on Railway**: one service from this GitHub repo, root directory left at the repo root, plus the Postgres plugin (`DATABASE_URL=${{Postgres.DATABASE_URL}}`). Service settings (Railway no longer reads `railway.json` for new services): build command `echo nothing to build`, start `pnpm --filter api start`, pre-deploy `pnpm --filter api db:migrate`, health check `/health`, exactly one replica (the poller must not run twice). Variables: `ADSB_USER_AGENT`, `CORS_ORIGIN` (the Vercel URL), `ADMIN_TOKEN`, and optionally the OpenSky keys.
+- **API on Railway**: one service from this GitHub repo, root directory left at the repo root, plus the Postgres plugin (`DATABASE_URL=${{Postgres.DATABASE_URL}}`). Service settings (Railway no longer reads `railway.json` for new services): build command `echo nothing to build`, start `pnpm --filter api start`, pre-deploy `pnpm --filter api db:migrate && pnpm --filter api recording:seed`, health check `/health`, exactly one replica (the poller must not run twice). Variables: `ADSB_USER_AGENT`, `CORS_ORIGIN` (the Vercel URL), `ADMIN_TOKEN`, and optionally the OpenSky keys.
 - **Web on Vercel**: import the repo with root directory `apps/web` and set `NEXT_PUBLIC_API_URL` to the Railway URL. Nothing secret goes in `NEXT_PUBLIC_` variables.
 
 Environment variables are listed in `apps/api/.env.example`, `apps/web/.env.example` and SPEC section 17.

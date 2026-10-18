@@ -12,7 +12,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
     "recording:export": "tsx scripts/export-recording.ts",
-    "recording:import": "tsx scripts/import-globe-history.ts"
+    "recording:import": "tsx scripts/import-globe-history.ts",
+    "recording:seed": "tsx scripts/seed-recordings.ts"
   },
   "dependencies": {
     "@aerotrack/detectors": "workspace:*",

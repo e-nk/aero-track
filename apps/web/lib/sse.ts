@@ -6,6 +6,8 @@ export interface LiveHandlers {
   onSnapshot: (data: SnapshotData) => void;
   onStatus: (data: { feedStatus: FeedStatus; lastPollAt: number | null }) => void;
   onEventUpsert: (e: BehaviourEvent) => void;
+  /** A new event (event_open). Kept apart from updates so alerts fire only once. */
+  onEventOpen: (e: BehaviourEvent) => void;
   onEventClose: (data: { id: string; hex: string; closedAt: number | null }) => void;
   onOverview: (data: OverviewData) => void;
   onFollows: (data: FollowsData) => void;
@@ -49,7 +51,7 @@ export function connectLive(url: string, h: LiveHandlers): () => void {
     };
     on("snapshot", h.onSnapshot);
     on("status", h.onStatus);
-    on("event_open", h.onEventUpsert);
+    on("event_open", h.onEventOpen);
     on("event_update", h.onEventUpsert);
     on("event_close", h.onEventClose);
     on("overview", h.onOverview);

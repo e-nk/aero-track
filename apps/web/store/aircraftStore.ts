@@ -1,4 +1,7 @@
 import { NO_FILTERS, type Filters } from "../lib/filters";
+import { THRESHOLDS } from "@aerotrack/shared";
+import { alertsForChanges, appendAlerts, type Alert } from "../lib/alerts";
+import { createWatchlist } from "../lib/watchlist";
 import type { BehaviourEvent, Observation, RecordingFile } from "@aerotrack/shared";
 import { create } from "zustand";
 import type { AircraftDetail } from "../lib/api";
@@ -37,6 +40,10 @@ export interface ReplayInfo {
   mode: RecordingFile["mode"];
 }
 
+// The live watch list is remembered in browser storage (Task 2 of the alerts plan).
+const watchlist = createWatchlist();
+const nowSec = () => Date.now() / 1000;
+
 interface AircraftStore extends LiveState {
   mode: "live" | "recorded";
   /** Recorded mode only: the recording being replayed and its controls. */
@@ -58,7 +65,40 @@ interface AircraftStore extends LiveState {
   setFilters: (patch: Partial<Filters>) => void;
   setSelection: (hex: string, patch: Partial<Selection>) => void;
   seedEvents: (detail: AircraftDetail) => void;
+  /** Alerts for watched flights (alerts design spec), newest first, this visit only. */
+  alerts: Alert[];
+  unreadAlerts: number;
+  /** Live: flights this browser watches (persisted). */
+  watched: string[];
+  /** Recorded: flights watched in this replay (memory only). */
+  replayWatch: string[];
+  /** When each flight was watched (epoch seconds; replay clock in recorded mode). */
+  watchSince: Record<string, number>;
+  /** Page load or last mode switch (epoch seconds). Older events never alert. */
+  alertsSince: number;
+  /** False when the watch list is full. */
+  watch: (hex: string, nowSec: number) => boolean;
+  unwatch: (hex: string) => void;
+  markAlertsRead: () => void;
   reset: () => void;
+}
+
+const EMPTY_ALERTS = { alerts: [] as Alert[], unreadAlerts: 0, replayWatch: [] as string[], watchSince: {} as Record<string, number> };
+
+/** Live alert step: run the pure function against the current store and merge the result. */
+function liveAlerts(s: AircraftStore, opened: BehaviourEvent[], closed: BehaviourEvent[]): Partial<AircraftStore> {
+  if (s.mode !== "live" || !s.watched.length) return {};
+  const fresh = alertsForChanges({
+    opened,
+    closed,
+    watched: new Set(s.watched),
+    since: (hex) => Math.max(s.alertsSince, s.watchSince[hex] ?? 0) - THRESHOLDS.alerts.backfillSec,
+    identity: (hex) => ({ callsign: s.aircraft[hex]?.callsign ?? s.overview?.aircraft[hex]?.callsign ?? null, registration: null }),
+    position: (hex) => s.aircraft[hex] ?? s.overview?.aircraft[hex],
+    mode: "live",
+  });
+  const { alerts, added } = appendAlerts(s.alerts, fresh);
+  return added ? { alerts, unreadAlerts: s.unreadAlerts + added } : {};
 }
 
 export const useAircraftStore = create<AircraftStore>()((set) => ({
@@ -66,7 +106,7 @@ export const useAircraftStore = create<AircraftStore>()((set) => ({
   mode: "live",
   replay: null,
   startRecorded: (info) =>
-    set({ ...initialLiveState, mode: "recorded", replay: info, selectedHex: null, selection: EMPTY_SELECTION, focus: null, filters: NO_FILTERS }),
+    set({ ...initialLiveState, mode: "recorded", replay: info, selectedHex: null, selection: EMPTY_SELECTION, focus: null, filters: NO_FILTERS, ...EMPTY_ALERTS, alertsSince: nowSec() }),
   setReplayFrame: (clock, aircraft, events) =>
     set((s) => ({
       replay: s.replay && { ...s.replay, clock },
@@ -79,7 +119,13 @@ export const useAircraftStore = create<AircraftStore>()((set) => ({
     onSnapshot: (data) => set((s) => applySnapshot(s, data, Date.now())),
     onStatus: (data) => set((s) => applyStatus(s, data)),
     onEventUpsert: (e) => set((s) => applyEventUpsert(s, e)),
-    onEventClose: (data) => set((s) => applyEventClose(s, data)),
+    onEventOpen: (e) => set((s) => ({ ...applyEventUpsert(s, e), ...liveAlerts(s, [e], []) })),
+    onEventClose: (data) =>
+      set((s) => {
+        const known = s.events[data.id];
+        const closed = known ? [{ ...known, status: "closed" as const, closedAt: data.closedAt }] : [];
+        return { ...applyEventClose(s, data), ...liveAlerts(s, [], closed) };
+      }),
     onOverview: (data) => set((s) => applyOverview(s, data, Date.now())),
     onFollows: (data) => set((s) => applyFollows(s, data)),
   },
@@ -89,6 +135,26 @@ export const useAircraftStore = create<AircraftStore>()((set) => ({
   focus: null,
   focusOn: (hex) => set({ selectedHex: hex, selection: EMPTY_SELECTION, focus: { hex, at: Date.now() } }),
   filters: NO_FILTERS,
+  ...EMPTY_ALERTS,
+  watched: watchlist.list(),
+  alertsSince: nowSec(),
+  watch: (hex, now) => {
+    const s = useAircraftStore.getState();
+    if (s.mode === "recorded") {
+      if (!s.replayWatch.includes(hex)) set({ replayWatch: [...s.replayWatch, hex], watchSince: { ...s.watchSince, [hex]: s.replay?.clock ?? now } });
+      return true;
+    }
+    if (!watchlist.add(hex)) return false;
+    set({ watched: watchlist.list(), watchSince: { ...s.watchSince, [hex]: now } });
+    return true;
+  },
+  unwatch: (hex) =>
+    set((s) => {
+      if (s.mode === "recorded") return { replayWatch: s.replayWatch.filter((h) => h !== hex) };
+      watchlist.remove(hex);
+      return { watched: watchlist.list() };
+    }),
+  markAlertsRead: () => set({ unreadAlerts: 0 }),
   setFilters: (patch) => set((s) => ({ filters: { ...s.filters, ...patch } })),
   // Ignore late responses for an aircraft that is no longer selected.
   setSelection: (hex, patch) =>
@@ -96,5 +162,16 @@ export const useAircraftStore = create<AircraftStore>()((set) => ({
   seedEvents: (detail) => set((s) => applyEventsSeed(s, detail.state.hex, detail.openEvents)),
   // Switching mode clears the map and store (SPEC 12.1).
   reset: () =>
-    set({ ...initialLiveState, mode: "live", replay: null, selectedHex: null, selection: EMPTY_SELECTION, focus: null, filters: NO_FILTERS }),
+    set({
+      ...initialLiveState,
+      mode: "live",
+      replay: null,
+      selectedHex: null,
+      selection: EMPTY_SELECTION,
+      focus: null,
+      filters: NO_FILTERS,
+      ...EMPTY_ALERTS,
+      alertsSince: nowSec(),
+      watched: watchlist.list(),
+    }),
 }));

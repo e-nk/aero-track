@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPhotoLookup, parsePhotoResponse, photoCredit } from "../lib/photos";
+import { createPhotoLookup, parsePhotoResponse, photoCredit, photoStatus } from "../lib/photos";
 
 const VALID = {
   photos: [
@@ -97,5 +97,27 @@ describe("photoCredit", () => {
     expect(photoCredit(null, "Ethan Shi")).toBe(
       "Photo by Ethan Shi, via Planespotters.net. It may not show the aircraft's current paint scheme.",
     );
+  });
+});
+
+describe("photoStatus", () => {
+  const photo = { src: "https://t.plnspttrs.net/1.jpg", width: 420, height: 280, link: "https://www.planespotters.net/photo/1", photographer: "A" };
+
+  it("is loading until the lookup for this aircraft answers", () => {
+    expect(photoStatus(null, "7c0001", "pending")).toBe("loading");
+    expect(photoStatus({ hex: "7c0002", photo }, "7c0001", "pending")).toBe("loading"); // answer for a previous aircraft
+  });
+
+  it("stays loading while the image file itself downloads", () => {
+    expect(photoStatus({ hex: "7c0001", photo }, "7c0001", "pending")).toBe("loading");
+  });
+
+  it("is ready once the image has loaded", () => {
+    expect(photoStatus({ hex: "7c0001", photo }, "7c0001", "loaded")).toBe("ready");
+  });
+
+  it("says there is no photo when the lookup finds none or the image fails", () => {
+    expect(photoStatus({ hex: "7c0001", photo: null }, "7c0001", "pending")).toBe("none");
+    expect(photoStatus({ hex: "7c0001", photo }, "7c0001", "error")).toBe("none");
   });
 });

@@ -329,6 +329,7 @@ Offline (P0): Protomaps PMTiles
   - All returned URLs are used unchanged. JSON may be cached up to 24 h (browser memory is enough).
   - Photos must not be a paid or member-only feature, and must not be used for ML datasets.
 - Honesty: label "Photo of {registration} by {photographer}, via Planespotters.net. It may not show the aircraft's current paint scheme." No photo → show nothing (no placeholder aircraft). Not available offline.
+- Panel states: a pulsing placeholder ("Looking for a photo…") until both the lookup and the image file have finished; "No photo available for this aircraft." when there is none or the image fails (`photoStatus` in `apps/web/lib/photos.ts`).
 
 ### 5.8 OpenSky Network: Australia-wide overview (P1)
 
@@ -702,6 +703,7 @@ sightings: id (uuid pk), hex, started_at, last_seen_at, took_off_at (null), take
 - Web: "Follow this flight" / "Following · Stop following" in the details panel (also for overview aircraft); a "Following" row of chips under the badges selects a flight and flies the map to it; followed aircraft are labelled at every zoom.
 - Worldwide airports: `pnpm build:airports --world` writes `apps/api/src/data/worldAirports.ts` (4,568 large and medium airports with an IATA code), merged with the Sydney list on the server.
 - Honesty: no destination until a landing is observed ("Landed near {airport} at {time}"). Over the ocean there is usually no receiver coverage, so the aircraft can vanish for hours; the panel says "There's usually no receiver coverage over the ocean. The last known position is shown." The map never draws a path through missing data.
+- The Following chips each have a × ("Stop following QFA1") so a flight can be unfollowed without finding it on the map. The list is shared by every visitor (no accounts), so anyone can change it.
 
 ### 11.7 HTTP API
 

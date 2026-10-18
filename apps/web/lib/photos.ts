@@ -77,3 +77,16 @@ export function photoCredit(registration: string | null, photographer: string): 
   const subject = registration ? `Photo of ${registration} by` : "Photo by";
   return `${subject} ${photographer}, via Planespotters.net. It may not show the aircraft's current paint scheme.`;
 }
+
+export type PhotoStatus = "loading" | "ready" | "none";
+
+/** What the panel shows: a placeholder until both the lookup and the image file have finished. */
+export function photoStatus(
+  lookup: { hex: string; photo: Photo | null } | null,
+  hex: string,
+  image: "pending" | "loaded" | "error",
+): PhotoStatus {
+  if (!lookup || lookup.hex !== hex) return "loading";
+  if (!lookup.photo || image === "error") return "none";
+  return image === "loaded" ? "ready" : "loading";
+}

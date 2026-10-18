@@ -38,7 +38,10 @@ export function AlertsMenu() {
                 <li key={a.id}>
                   <button type="button" onClick={() => focusOn(a.hex)} className="block w-full rounded-lg px-2 py-2 text-left hover:bg-white/5">
                     <span className="flex justify-between gap-2">
-                      <span className="font-medium">{a.title}</span>
+                      <span className="font-medium">
+                        {a.title}
+                        {a.mode !== "live" && <span className="ml-1.5 rounded-full bg-white/10 px-1.5 py-0.5 align-middle text-[10px] uppercase tracking-wide text-muted">Recorded</span>}
+                      </span>
                       <span className="shrink-0 text-xs text-muted">{time.format(new Date(a.at * 1000))}</span>
                     </span>
                     <span className="block text-xs text-text/80">{a.body}</span>

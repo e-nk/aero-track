@@ -51,3 +51,11 @@ describe("notify", () => {
     expect(await requestNotifications()).toBe("granted");
   });
 });
+
+describe("notify: recorded alerts", () => {
+  it("marks a recorded alert's notification so it can't pass for live news", () => {
+    const { created } = fakeNotification("granted");
+    showNotification({ ...alert, mode: "recorded" }, () => {});
+    expect(created[0]!.title).toBe("Recorded: QFA520 landed");
+  });
+});

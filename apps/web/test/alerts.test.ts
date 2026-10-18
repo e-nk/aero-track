@@ -1,6 +1,6 @@
 import type { BehaviourEvent, EventType } from "@aerotrack/shared";
 import { describe, expect, it } from "vitest";
-import { alertsForChanges, appendAlerts, placePhrase, type Alert, type AlertInput } from "../lib/alerts";
+import { alertsForChanges, appendAlerts, placePhrase, shouldAnnounce, type Alert, type AlertInput } from "../lib/alerts";
 
 const T = 1_731_029_700; // 8 Nov 2024, 12:35 pm in Sydney
 const SYD = { lat: -33.946, lon: 151.177 }; // Sydney Kingsford Smith
@@ -145,5 +145,20 @@ describe("appendAlerts", () => {
   it("keeps at most 50", () => {
     const many = Array.from({ length: 60 }, (_, i) => a(String(i), i));
     expect(appendAlerts([], many).alerts).toHaveLength(50);
+  });
+});
+
+describe("review fixes", () => {
+  it("dates take-off and landing alerts by the touchdown or lift-off time, not the confirmation time", () => {
+    const a = one({ opened: [ev("landing", { at: T - 50 }, { openedAt: T })] });
+    expect(a.at).toBe(T - 50);
+    expect(a.body).toContain("at 12:34 pm");
+  });
+
+  it("announces a replay alert only when it happened near the replay clock (no bursts when seeking)", () => {
+    const rec = { id: "x", eventId: "x", hex: "h", kind: "landing" as const, title: "t", body: "b", at: T, mode: "recorded" as const };
+    expect(shouldAnnounce(rec, T + 30)).toBe(true);
+    expect(shouldAnnounce(rec, T + 3600)).toBe(false);
+    expect(shouldAnnounce({ ...rec, mode: "live" }, null)).toBe(true);
   });
 });

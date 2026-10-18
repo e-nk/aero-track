@@ -2,7 +2,7 @@
 
 import { THRESHOLDS } from "@aerotrack/shared";
 import { useEffect, useState } from "react";
-import type { Alert } from "../../lib/alerts";
+import { shouldAnnounce, type Alert } from "../../lib/alerts";
 import { showNotification } from "../../lib/notify";
 import { useAircraftStore } from "../../store/aircraftStore";
 
@@ -16,11 +16,10 @@ export function AlertToasts() {
       useAircraftStore.subscribe((s, prev) => {
         if (s.alerts === prev.alerts) return;
         const known = new Set(prev.alerts.map((a) => a.id));
-        const fresh = s.alerts.filter((a) => !known.has(a.id));
-        if (!fresh.length) {
-          if (!s.alerts.length) setToasts([]); // mode switch or seek back cleared the list
-          return;
-        }
+        const clock = s.replay?.clock ?? null;
+        const fresh = s.alerts.filter((a) => !known.has(a.id) && shouldAnnounce(a, clock));
+        if (!s.alerts.length) setToasts([]); // mode switch or seek back cleared the list
+        if (!fresh.length) return;
         for (const a of fresh) {
           showNotification(a, () => useAircraftStore.getState().focusOn(a.hex));
           setTimeout(() => setToasts((t) => t.filter((x) => x.id !== a.id)), THRESHOLDS.alerts.toastMs);

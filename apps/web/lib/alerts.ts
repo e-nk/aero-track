@@ -105,7 +105,10 @@ export function alertsForChanges(input: AlertInput): Alert[] {
   for (const e of input.opened) {
     if (!relevant(e)) continue;
     const w = wordingForOpen(e, nameOf(e.hex), input, timeZone);
-    if (w) out.push({ id: `${e.id}:open`, eventId: e.id, hex: e.hex, ...w, at: e.openedAt, mode: input.mode });
+    // Take-off and landing are confirmed a few reports later: date them by the moment itself,
+    // so the list's time matches the time in the sentence.
+    const moment = (e.type === "takeoff" || e.type === "landing") && typeof e.evidence.at === "number" ? e.evidence.at : e.openedAt;
+    if (w) out.push({ id: `${e.id}:open`, eventId: e.id, hex: e.hex, ...w, at: moment, mode: input.mode });
   }
   for (const e of input.closed) {
     if (e.type !== "signal_lost" || !relevant(e)) continue;
@@ -136,4 +139,10 @@ export function appendAlerts(existing: readonly Alert[], fresh: readonly Alert[]
   if (!novel.length) return { alerts: existing as Alert[], added: 0 };
   const alerts = [...novel, ...existing].sort((a, b) => b.at - a.at).slice(0, MAX_ALERTS);
   return { alerts, added: novel.length };
+}
+
+/** Toast and notify? Live: always. Recorded: only alerts from near the replay clock, so seeking doesn't fire a burst. */
+export function shouldAnnounce(alert: Alert, replayClock: number | null): boolean {
+  if (alert.mode === "live") return true;
+  return replayClock !== null && Math.abs(replayClock - alert.at) <= THRESHOLDS.alerts.backfillSec;
 }

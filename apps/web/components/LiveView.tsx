@@ -26,7 +26,8 @@ export function LiveView() {
   const feedDown = useAircraftStore((s) => s.feedStatus === "down" || s.connection === "reconnecting");
 
   useEffect(() => {
-    const { handlers, reset } = useAircraftStore.getState();
+    const { handlers, reset, loadWatchlist } = useAircraftStore.getState();
+    loadWatchlist();
     const disconnect = connectLive(`${API_URL}/api/stream`, handlers);
     return () => {
       disconnect();

@@ -87,10 +87,12 @@ interface AircraftStore extends LiveState {
   watch: (hex: string, nowSec: number) => boolean;
   unwatch: (hex: string) => void;
   markAlertsRead: () => void;
+  /** Read the remembered watch list (client only, after mount: the server render has none). */
+  loadWatchlist: () => void;
   /** Recorded mode: alerts for one replay step's lifecycle changes. */
   applyReplayChanges: (changes: LifecycleChanges, lookup: ReplayLookup) => void;
-  /** Recorded mode: forget alerts (seeking backwards replays from the start). */
-  resetReplayAlerts: () => void;
+  /** Recorded mode: forget alerts when seeking back to `toClock`; watches count from no later than there. */
+  resetReplayAlerts: (toClock?: number) => void;
   reset: () => void;
 }
 
@@ -138,7 +140,17 @@ export const useAircraftStore = create<AircraftStore>()((set) => ({
         return { ...applyEventClose(s, data), ...liveAlerts(s, [], closed) };
       }),
     onOverview: (data) => set((s) => applyOverview(s, data, Date.now())),
-    onFollows: (data) => set((s) => applyFollows(s, data)),
+    onFollows: (data) =>
+      set((s) => {
+        const next = applyFollows(s, data);
+        if (s.mode !== "live") return next;
+        // Live watching always follows, so a watch whose follow is gone (landed and expired,
+        // 24 h old, or removed by someone) is stale: drop it.
+        const followed = new Set(data.follows.map((f) => f.hex));
+        const stale = s.watched.filter((h) => !followed.has(h));
+        for (const hex of stale) watchlist.remove(hex);
+        return stale.length ? { ...next, watched: watchlist.list() } : next;
+      }),
   },
   selectedHex: null,
   selection: EMPTY_SELECTION,
@@ -147,8 +159,9 @@ export const useAircraftStore = create<AircraftStore>()((set) => ({
   focusOn: (hex) => set({ selectedHex: hex, selection: EMPTY_SELECTION, focus: { hex, at: Date.now() } }),
   filters: NO_FILTERS,
   ...EMPTY_ALERTS,
-  watched: watchlist.list(),
+  watched: [],
   alertsSince: nowSec(),
+  loadWatchlist: () => set({ watched: watchlist.list() }),
   watch: (hex, now) => {
     const s = useAircraftStore.getState();
     if (s.mode === "recorded") {
@@ -182,7 +195,13 @@ export const useAircraftStore = create<AircraftStore>()((set) => ({
       const { alerts, added } = appendAlerts(s.alerts, fresh);
       return added ? { alerts, unreadAlerts: s.unreadAlerts + added } : {};
     }),
-  resetReplayAlerts: () => set({ alerts: [], unreadAlerts: 0 }),
+  resetReplayAlerts: (toClock) =>
+    set((s) => {
+      // A rewind means "show me again": count watches from no later than the new position.
+      const watchSince = { ...s.watchSince };
+      if (toClock !== undefined) for (const hex of s.replayWatch) watchSince[hex] = Math.min(watchSince[hex] ?? toClock, toClock);
+      return { alerts: [], unreadAlerts: 0, watchSince };
+    }),
   setFilters: (patch) => set((s) => ({ filters: { ...s.filters, ...patch } })),
   // Ignore late responses for an aircraft that is no longer selected.
   setSelection: (hex, patch) =>

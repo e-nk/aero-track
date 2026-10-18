@@ -105,3 +105,33 @@ describe("replay alerts", () => {
     expect(useAircraftStore.getState()).toMatchObject({ alerts: [], unreadAlerts: 0, replayWatch: ["7c6db7"] });
   });
 });
+
+describe("review fixes (store)", () => {
+  it("loads the remembered watch list on demand, so the server and first client render agree", () => {
+    const s = useAircraftStore.getState();
+    s.watch("7c6db7", NOW);
+    useAircraftStore.setState({ watched: [] });
+    useAircraftStore.getState().loadWatchlist();
+    expect(useAircraftStore.getState().watched).toEqual(["7c6db7"]);
+  });
+
+  it("drops watches whose follow the server no longer has", () => {
+    const s = useAircraftStore.getState();
+    s.watch("aaaaaa", NOW);
+    s.watch("bbbbbb", NOW);
+    s.handlers.onFollows({ max: 10, follows: [{ hex: "bbbbbb", addedAt: NOW, landedAt: null }] });
+    expect(useAircraftStore.getState().watched).toEqual(["bbbbbb"]);
+  });
+
+  it("rewinding before the watch time still shows the alerts again", () => {
+    const info = { id: "r", title: "t", start: NOW, end: NOW + 600, clock: NOW + 500, speed: 10, playing: true, attribution: "a", reportedCause: null, mode: "recorded" as const };
+    useAircraftStore.getState().startRecorded(info);
+    useAircraftStore.getState().watch("7c6db7", 0); // watched at replay clock NOW+500
+    useAircraftStore.getState().resetReplayAlerts(NOW);
+    useAircraftStore.getState().applyReplayChanges(
+      { opened: [{ ...landing("rw", NOW + 30), mode: "recorded" }], updated: [], closed: [] },
+      { identity: () => undefined, position: () => undefined },
+    );
+    expect(useAircraftStore.getState().alerts.map((a) => a.eventId)).toEqual(["rw"]);
+  });
+});

@@ -34,7 +34,9 @@ export function showNotification(alert: Alert, onClick: () => void): boolean {
   const N = api();
   if (!N || N.permission !== "granted") return false;
   try {
-    const n = new N(alert.title, { body: alert.body, tag: alert.id });
+    // Outside the page there is no mode badge: say so in the title (rule 3).
+    const title = alert.mode === "live" ? alert.title : `Recorded: ${alert.title}`;
+    const n = new N(title, { body: alert.body, tag: alert.id });
     n.onclick = () => {
       globalThis.focus?.();
       onClick();

@@ -96,7 +96,7 @@ export function RecordedView({ id }: { id: string }) {
     const engine = engineRef.current;
     if (!engine) return;
     const store = useAircraftStore.getState();
-    if (t < engine.clock) store.resetReplayAlerts(); // replaying from the start: don't repeat old alerts
+    if (t < engine.clock) store.resetReplayAlerts(t); // replaying from the start: don't repeat old alerts
     const changes = engine.seek(t);
     if (lookupRef.current) store.applyReplayChanges(changes, lookupRef.current);
     store.setReplayFrame(engine.clock, engine.aircraft(Date.now()), engine.openEvents());

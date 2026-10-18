@@ -339,6 +339,8 @@ Offline (P0): Protomaps PMTiles
 - Response: `{ time, states: [[icao24, callsign, origin_country, time_position, last_contact, longitude, latitude, baro_altitude (m), on_ground, velocity (m/s), true_track, vertical_rate (m/s), sensors, geo_altitude (m), squawk, spi, position_source, category]] }`. `states` can be null. Units are metric: the adapter converts to ft, kt and fpm. No aircraft type or registration. `category` was 0 ("no information") for 62 of 63 aircraft, so overview aircraft use the generic icon.
 - Terms: secondary sources say the data is for non-commercial / research use and ask for citation of OpenSky. The terms page (opensky-network.org/about/terms-of-use) blocks scripted access, so the owner reads it directly. AeroTrack is non-commercial. Attribute "Data: The OpenSky Network" on the map whenever overview aircraft are shown.
 
+- **Verified 2026-10-18: OpenSky blocks hosted backends.** From Railway (US West and EU West) TCP connections to `opensky-network.org` and `auth.opensky-network.org` time out, while GitHub and example.com work and the same requests succeed from a home connection. OpenSky's API docs say it may block AWS and other hyperscalers; another Railway user was told the blocking is intentional and allowlisting is refused (github.com/georgekobaidze/metal-birds-watch/issues/98). Relaying through another network (e.g. a Cloudflare Worker) would get around a deliberate block, so we don't. The overview only works where OpenSky allows the server's network (e.g. local development).
+
 ### 5.6 LLM phrasing (P2)
 
 - Server only, from `apps/api`. Never the browser.
@@ -418,7 +420,7 @@ All starting values. Tune on recorded data.
 
 ```ts
 export const THRESHOLDS = {
-  poll: { intervalMs: 10000, timeoutMs: 5000, maxBackoffMs: 60000, downAfterFailures: 3, radiusNm: 60, centre: { lat: -33.9, lon: 151.0 } },
+  poll: { intervalMs: 10000, timeoutMs: 8000, maxBackoffMs: 60000, downAfterFailures: 3, radiusNm: 60, centre: { lat: -33.9, lon: 151.0 } },
   buffer: { keepSec: 900 },
   writer: { flushMs: 5000, maxRows: 500 },
   sse: { heartbeatMs: 15000, maxBufferedBytes: 1000000 },

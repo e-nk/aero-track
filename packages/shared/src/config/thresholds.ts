@@ -75,7 +75,8 @@ export interface Thresholds {
 export const THRESHOLDS = {
   poll: {
     intervalMs: 10000, // 10 s: adsb.lol rate-limits faster polling (see SPEC 5.1)
-    timeoutMs: 5000,
+    // 8 s, not 5: from Railway (US West) adsb.lol took 5.6 s on 2026-10-18. Still well inside the 10 s poll.
+    timeoutMs: 8000,
     maxBackoffMs: 60000, // exponential backoff cap after failures
     downAfterFailures: 3, // one missed poll is "degraded"; three in a row (~1 min) is "down"
     radiusNm: 60,

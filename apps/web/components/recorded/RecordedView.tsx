@@ -12,6 +12,9 @@ import { ReplayEngine } from "../../lib/replay/engine";
 import { useAircraftStore, type ReplayLookup } from "../../store/aircraftStore";
 import { ReportedCause } from "./ReportedCause";
 import { FilterBar } from "../filters/FilterBar";
+import { AlertToasts } from "../alerts/AlertToasts";
+import { AlertsMenu } from "../alerts/AlertsMenu";
+import { NotifyBanner } from "../alerts/NotifyBanner";
 import { ModeBadge } from "../ModeBadge";
 import { DetailsPanel } from "../panel/DetailsPanel";
 import { ReplayControls } from "./ReplayControls";
@@ -120,6 +123,9 @@ export function RecordedView({ id }: { id: string }) {
         <div className="pointer-events-auto">
           <ModeBadge />
         </div>
+        <div className="pointer-events-auto">
+          <AlertsMenu />
+        </div>
         <Link
           href={OFFLINE ? "/recorded" : "/"}
           className="pointer-events-auto rounded-full border border-white/10 bg-navy/90 px-3 py-1.5 text-sm text-sky shadow-lg hover:bg-white/5"
@@ -133,6 +139,8 @@ export function RecordedView({ id }: { id: string }) {
       {!recording && <p className="absolute inset-0 flex items-center justify-center text-muted">Loading recording…</p>}
       {recording && <ReplayControls title={recording.title} onSeek={seek} />}
       {recording?.reportedCause && <ReportedCause cause={recording.reportedCause} />}
+      <AlertToasts />
+      <NotifyBanner />
       <DetailsPanel />
     </main>
   );

@@ -11,6 +11,8 @@ export function FollowingList() {
   const aircraft = useAircraftStore((s) => s.aircraft);
   const overview = useAircraftStore((s) => s.overview);
   const focusOn = useAircraftStore((s) => s.focusOn);
+  const watched = useAircraftStore((s) => s.watched);
+  const unwatch = useAircraftStore((s) => s.unwatch);
   const [removing, setRemoving] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   if (!follows.length) return null;
@@ -18,6 +20,7 @@ export function FollowingList() {
   async function stop(hex: string) {
     setRemoving(hex);
     setMessage(null);
+    unwatch(hex);
     const result = await unfollowFlight(hex);
     setRemoving(null);
     if (!result.ok) setMessage(result.message);
@@ -33,6 +36,7 @@ export function FollowingList() {
         return (
           <span key={f.hex} className="inline-flex items-center rounded-full border border-sky/40 bg-navy/90 text-xs text-sky shadow-lg">
             <button type="button" onClick={() => focusOn(f.hex)} className="rounded-l-full py-1 pl-2.5 pr-1.5 hover:bg-sky/10">
+              {watched.includes(f.hex) && <span aria-label="watching">🔔 </span>}
               {name}
               {f.landedAt !== null && <span className="text-muted"> · landed</span>}
             </button>

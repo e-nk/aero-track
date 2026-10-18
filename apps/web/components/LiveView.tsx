@@ -8,6 +8,9 @@ import { API_URL } from "../lib/config";
 import { connectLive } from "../lib/sse";
 import { useSelectedAircraft } from "../lib/useSelectedAircraft";
 import { useAircraftStore } from "../store/aircraftStore";
+import { AlertToasts } from "./alerts/AlertToasts";
+import { AlertsMenu } from "./alerts/AlertsMenu";
+import { NotifyBanner } from "./alerts/NotifyBanner";
 import { ModeBadge } from "./ModeBadge";
 import { FilterBar } from "./filters/FilterBar";
 import { FollowingList } from "./follow/FollowingList";
@@ -41,6 +44,9 @@ export function LiveView() {
         <div className="pointer-events-auto">
           <ModeBadge />
         </div>
+        <div className="pointer-events-auto">
+          <AlertsMenu />
+        </div>
         <Link
           href="/recorded"
           className="pointer-events-auto rounded-full border border-white/10 bg-navy/90 px-3 py-1.5 text-sm text-sky shadow-lg hover:bg-white/5"
@@ -57,6 +63,8 @@ export function LiveView() {
           <FollowingList />
         </div>
       </header>
+      <AlertToasts />
+      <NotifyBanner />
       <DetailsPanel />
     </main>
   );

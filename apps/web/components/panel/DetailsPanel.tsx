@@ -16,7 +16,7 @@ import { openEventsFor } from "../../lib/liveState";
 import { earlierEvents } from "../../lib/timeline";
 import { useNow } from "../../lib/useNow";
 import { useAircraftStore } from "../../store/aircraftStore";
-import { FollowButton } from "../follow/FollowButton";
+import { WatchButton } from "../follow/WatchButton";
 import { AircraftPhoto } from "./AircraftPhoto";
 import { EventCard } from "./EventCard";
 
@@ -85,7 +85,7 @@ export function DetailsPanel() {
       <aside aria-label="Aircraft details" className={PANEL_CLASS}>
         <PanelHeader title={ov.callsign ?? "Callsign not available"} subtitle={`Australia-wide data · ${hex}`} onClose={() => select(null)} />
         <AircraftPhoto hex={hex} registration={null} />
-        <FollowButton hex={hex} />
+        <WatchButton hex={hex} />
         <section aria-labelledby="ov-now-h" className="mb-5">
           <h3 id="ov-now-h" className="mb-1 text-xs uppercase tracking-wide text-muted">
             Now
@@ -126,7 +126,7 @@ export function DetailsPanel() {
       ) : (
         <>
           <AircraftPhoto hex={hex} registration={state?.registration ?? null} />
-          {!recorded && <FollowButton hex={hex} />}
+          <WatchButton hex={hex} />
           {!recorded && followed && (
             <p className="mb-4 text-xs leading-snug text-muted">
               Following this flight worldwide, updated about every 30 seconds wherever ADSB.lol has receivers. There&apos;s
